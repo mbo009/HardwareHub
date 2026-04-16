@@ -13,9 +13,23 @@ def create_app():
 
     os.makedirs(app.instance_path, exist_ok=True)
 
+    db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+
+    if db_uri.startswith("sqlite:///"):
+        db_path = db_uri[len("sqlite:///") :]
+        db_dir = os.path.dirname(db_path)
+
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
+
     db.init_app(app)
 
-    origins = [o.strip() for o in app.config.get("CORS_ORIGINS_RAW", "").split(",") if o.strip()]
+    origins = [
+        origin.strip()
+        for origin in app.config.get("CORS_ORIGINS_RAW", "").split(",")
+        if origin.strip()
+    ]
+
     CORS(app, resources={r"/api/*": {"origins": origins}}, supports_credentials=True)
 
     app.register_blueprint(api_bp)
