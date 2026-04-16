@@ -15,11 +15,14 @@ class Config:
     if env_db_uri and env_db_uri.startswith("sqlite:///"):
         extracted = env_db_uri[len("sqlite:///") :]
 
-        if not os.path.isabs(extracted):
+        if extracted == ":memory:":
+            SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+        elif not os.path.isabs(extracted):
             extracted = os.path.abspath(os.path.join(repo_root, extracted))
 
-        resolved_db_path = extracted
-        SQLALCHEMY_DATABASE_URI = "sqlite:///" + resolved_db_path.replace("\\", "/")
+        if extracted != ":memory:":
+            resolved_db_path = extracted
+            SQLALCHEMY_DATABASE_URI = "sqlite:///" + resolved_db_path.replace("\\", "/")
     else:
         SQLALCHEMY_DATABASE_URI = "sqlite:///" + default_db_path.replace("\\", "/")
 

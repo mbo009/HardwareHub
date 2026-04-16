@@ -2,7 +2,9 @@ import os
 from flask import Flask
 from flask_cors import CORS
 
+from .admin import admin_bp
 from .config import Config
+from .auth import auth_bp
 from .db import db
 from .routes import api_bp
 
@@ -33,6 +35,8 @@ def create_app():
     CORS(app, resources={r"/api/*": {"origins": origins}}, supports_credentials=True)
 
     app.register_blueprint(api_bp)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(admin_bp)
 
     @app.get("/")
     def index():

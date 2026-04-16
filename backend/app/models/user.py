@@ -27,4 +27,3 @@ class User(db.Model):
     __table_args__ = (
         db.CheckConstraint("role IN ('admin','user')", name="ck_users_role"),
     )
-
