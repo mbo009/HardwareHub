@@ -9,6 +9,10 @@
     "preview": "vite preview --port 5173"
   },
   "dependencies": {
+    "@emotion/react": "*",
+    "@emotion/styled": "*",
+    "@mui/joy": "*",
+    "framer-motion": "*",
     "react": "*",
     "react-dom": "*",
     "react-router-dom": "*"
