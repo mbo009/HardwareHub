@@ -3,6 +3,7 @@ from flask import Flask
 from flask_cors import CORS
 
 from .admin import admin_bp
+from .hardware import hardware_bp
 from .config import Config
 from .auth import auth_bp
 from .db import db
@@ -37,6 +38,7 @@ def create_app():
     app.register_blueprint(api_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(hardware_bp)
 
     @app.get("/")
     def index():

@@ -1,6 +1,6 @@
 from functools import wraps
 
-from flask import jsonify, session
+from flask import jsonify, request, session
 
 from app.db import db
 from app.models import User
@@ -9,6 +9,9 @@ from app.models import User
 def login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
+        if request.method == "OPTIONS":
+            return "", 200
+
         user_id = session.get("user_id")
         if not user_id:
             return jsonify({"error": "unauthorized"}), 401
@@ -26,6 +29,9 @@ def login_required(fn):
 def admin_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
+        if request.method == "OPTIONS":
+            return "", 200
+
         user_id = session.get("user_id")
         if not user_id:
             return jsonify({"error": "unauthorized"}), 401
