@@ -1,6 +1,7 @@
 from datetime import date
 
 from flask import Blueprint, jsonify, request
+from sqlalchemy import case
 
 from app.auth.decorators import login_required
 from app.models import Hardware
@@ -68,25 +69,40 @@ def list_hardware():
             return jsonify({"error": "invalid_date_to"}), 400
         query = query.filter(Hardware.purchase_date <= date_to)
 
-    sort_map = {
-        "name": Hardware.name,
-        "brand": Hardware.brand,
-        "purchaseDate": Hardware.purchase_date,
-        "status": Hardware.status,
-    }
-    sort_col = sort_map.get(sort_by, Hardware.name)
-    if order == "desc":
-        query = query.order_by(sort_col.desc(), Hardware.id.desc())
+    if sort_by == "status":
+        status_rank = case(
+            (Hardware.status == "Available", 1),
+            (Hardware.status == "In Use", 2),
+            (Hardware.status == "Repair", 3),
+            else_=4,
+        )
+        if order == "desc":
+            query = query.order_by(status_rank.desc(), Hardware.id.desc())
+        else:
+            query = query.order_by(status_rank.asc(), Hardware.id.asc())
     else:
-        query = query.order_by(sort_col.asc(), Hardware.id.asc())
-
-    if not page_raw and not limit_raw:
-        items = query.all()
-        return jsonify([to_payload(item) for item in items])
+        sort_map = {
+            "name": Hardware.name,
+            "brand": Hardware.brand,
+            "purchaseDate": Hardware.purchase_date,
+        }
+        sort_col = sort_map.get(sort_by, Hardware.name)
+        if order == "desc":
+            query = query.order_by(
+                sort_col.is_(None).asc(),
+                sort_col.desc(),
+                Hardware.id.desc(),
+            )
+        else:
+            query = query.order_by(
+                sort_col.is_(None).asc(),
+                sort_col.asc(),
+                Hardware.id.asc(),
+            )
 
     try:
         page = int(page_raw or "1")
-        limit = int(limit_raw or "10")
+        limit = int(limit_raw or "20")
     except ValueError:
         return jsonify({"error": "invalid_pagination"}), 400
 

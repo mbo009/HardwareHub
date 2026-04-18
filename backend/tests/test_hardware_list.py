@@ -49,10 +49,13 @@ def test_hardware_list_returns_rows_for_logged_user(client, app):
     res = client.get("/api/hardware")
     assert res.status_code == 200
     data = res.get_json()
-    assert len(data) == 3
-    assert data[0]["name"] == "Dell XPS 15"
-    assert data[1]["name"] == "MacBook Pro 16"
-    assert data[2]["name"] == "iPad Air"
+    assert data["page"] == 1
+    assert data["limit"] == 20
+    assert data["total"] == 3
+    assert len(data["items"]) == 3
+    assert data["items"][0]["name"] == "Dell XPS 15"
+    assert data["items"][1]["name"] == "MacBook Pro 16"
+    assert data["items"][2]["name"] == "iPad Air"
 
 
 def test_hardware_list_status_filter(client, app):
@@ -61,8 +64,8 @@ def test_hardware_list_status_filter(client, app):
     res = client.get("/api/hardware?status=Available")
     assert res.status_code == 200
     data = res.get_json()
-    assert len(data) == 1
-    assert data[0]["name"] == "MacBook Pro 16"
+    assert len(data["items"]) == 1
+    assert data["items"][0]["name"] == "MacBook Pro 16"
 
 
 def test_hardware_list_search_filter(client, app):
@@ -71,7 +74,7 @@ def test_hardware_list_search_filter(client, app):
     res = client.get("/api/hardware?search=apple")
     assert res.status_code == 200
     data = res.get_json()
-    names = [item["name"] for item in data]
+    names = [item["name"] for item in data["items"]]
     assert names == ["MacBook Pro 16", "iPad Air"]
 
 
@@ -81,7 +84,7 @@ def test_hardware_list_brand_filter(client, app):
     res = client.get("/api/hardware?brand=Apple")
     assert res.status_code == 200
     data = res.get_json()
-    names = [item["name"] for item in data]
+    names = [item["name"] for item in data["items"]]
     assert names == ["MacBook Pro 16", "iPad Air"]
 
 
@@ -91,7 +94,7 @@ def test_hardware_list_date_range_filter(client, app):
     res = client.get("/api/hardware?dateFrom=2026-01-16&dateTo=2026-02-01")
     assert res.status_code == 200
     data = res.get_json()
-    names = [item["name"] for item in data]
+    names = [item["name"] for item in data["items"]]
     assert names == ["Dell XPS 15"]
 
 
@@ -130,5 +133,5 @@ def test_hardware_list_sort_desc_by_purchase_date(client, app):
     res = client.get("/api/hardware?sortBy=purchaseDate&order=desc")
     assert res.status_code == 200
     data = res.get_json()
-    names = [item["name"] for item in data]
+    names = [item["name"] for item in data["items"]]
     assert names == ["iPad Air", "Dell XPS 15", "MacBook Pro 16"]
