@@ -10,6 +10,7 @@ import ModalDialog from "@mui/joy/ModalDialog";
 import Option from "@mui/joy/Option";
 import Select from "@mui/joy/Select";
 import Stack from "@mui/joy/Stack";
+import Textarea from "@mui/joy/Textarea";
 import Typography from "@mui/joy/Typography";
 
 type Props = {
@@ -21,6 +22,8 @@ type Props = {
   setSerial: (value: string) => void;
   brand: string;
   setBrand: (value: string) => void;
+  notes: string;
+  setNotes: (value: string) => void;
   category: string | null;
   setCategory: (value: string | null) => void;
   touched: boolean;
@@ -40,6 +43,8 @@ export default function AddDeviceModal(props: Props) {
     setSerial,
     brand,
     setBrand,
+    notes,
+    setNotes,
     category,
     setCategory,
     touched,
@@ -88,7 +93,7 @@ export default function AddDeviceModal(props: Props) {
             />
           </FormControl>
 
-          <FormControl error={touched && (trimmedSerial.length === 0 || serialTaken)}>
+          <FormControl error={touched && serialTaken}>
             <FormLabel sx={{ color: "#111827", fontSize: 14, fontWeight: 600 }}>
               Serial Number
             </FormLabel>
@@ -134,6 +139,19 @@ export default function AddDeviceModal(props: Props) {
               <Option value="Monitor">Monitor</Option>
               <Option value="Other">Other</Option>
             </Select>
+          </FormControl>
+
+          <FormControl>
+            <FormLabel sx={{ color: "#111827", fontSize: 14, fontWeight: 600 }}>
+              Notes
+            </FormLabel>
+            <Textarea
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder="Optional notes..."
+              minRows={3}
+              sx={{ fontSize: 12, borderRadius: 12 }}
+            />
           </FormControl>
         </Stack>
 

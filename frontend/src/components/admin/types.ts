@@ -5,6 +5,7 @@ export type Row = {
   serial: string;
   date: string;
   status: "Available" | "Rented" | "In Repair" | "Unknown";
+  notes?: string | null;
   category?: string;
 };
 
@@ -12,8 +13,10 @@ export type HardwareCreateResponse = {
   id: number;
   name: string;
   brand: string;
+  serialNumber: string | null;
   purchaseDate: string | null;
   status: "Available" | "In Use" | "Repair" | "Unknown";
+  notes: string | null;
 };
 
 export type HardwareRepairResponse = {
@@ -28,6 +31,7 @@ export type HardwareListItem = {
   seedId: number | null;
   name: string;
   brand: string;
+  serialNumber: string | null;
   purchaseDate: string | null;
   status: "Available" | "In Use" | "Repair" | "Unknown";
   notes: string | null;

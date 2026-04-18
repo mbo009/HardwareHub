@@ -34,6 +34,7 @@ export default function AdminPanelPage() {
   const [name, setName] = useState("");
   const [serial, setSerial] = useState("");
   const [brand, setBrand] = useState("");
+  const [notes, setNotes] = useState("");
   const [category, setCategory] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,11 +55,13 @@ export default function AdminPanelPage() {
   const trimmedName = name.trim();
   const trimmedSerial = serial.trim();
   const trimmedBrand = brand.trim();
+  const trimmedNotes = notes.trim();
 
-  const serialTaken = existingSerials.has(trimmedSerial.toLowerCase());
+  const serialTaken =
+    trimmedSerial.length > 0 &&
+    existingSerials.has(trimmedSerial.toLowerCase());
   const isValid =
     trimmedName.length > 0 &&
-    trimmedSerial.length > 0 &&
     trimmedBrand.length > 0 &&
     Boolean(category) &&
     !serialTaken;
@@ -67,6 +70,7 @@ export default function AdminPanelPage() {
     setName("");
     setSerial("");
     setBrand("");
+    setNotes("");
     setCategory(null);
     setTouched(false);
     setSubmitError(null);
@@ -82,22 +86,6 @@ export default function AdminPanelPage() {
     if (status === "Repair") return "In Repair";
     if (status === "Unknown") return "Unknown";
     return "Available";
-  };
-
-  const extractSerial = (item: HardwareListItem): string => {
-    const notes = item.notes || "";
-    const marker = "Serial:";
-    const idx = notes.indexOf(marker);
-    if (idx >= 0) {
-      const value = notes.slice(idx + marker.length).trim();
-      if (value) {
-        return value;
-      }
-    }
-    if (item.seedId !== null && item.seedId !== undefined) {
-      return `SEED-${item.seedId}`;
-    }
-    return `HW-${item.id}`;
   };
 
   useEffect(() => {
@@ -131,10 +119,9 @@ export default function AdminPanelPage() {
     if (dateToFilter) {
       params.set("dateTo", dateToFilter);
     }
-    if (sortBy !== "serial") {
-      params.set("sortBy", sortBy);
-      params.set("order", sortOrder);
-    }
+    const sortByParam = sortBy === "serial" ? "serialNumber" : sortBy;
+    params.set("sortBy", sortByParam);
+    params.set("order", sortOrder);
     params.set("page", String(page));
     params.set("limit", "8");
     const query = params.toString();
@@ -146,19 +133,11 @@ export default function AdminPanelPage() {
           id: item.id,
           name: item.name,
           brand: item.brand,
-          serial: extractSerial(item),
+          serial: item.serialNumber || "",
           date: item.purchaseDate || "-",
           status: toUiStatus(item.status),
+          notes: item.notes,
         }));
-        if (sortBy === "serial") {
-          mapped.sort((a, b) => {
-            const compare = a.serial.localeCompare(b.serial, undefined, {
-              numeric: true,
-              sensitivity: "base",
-            });
-            return sortOrder === "asc" ? compare : -compare;
-          });
-        }
         setRows(mapped);
         setTotalPages(response.totalPages || 1);
       })
@@ -188,9 +167,10 @@ export default function AdminPanelPage() {
         body: JSON.stringify({
           name: trimmedName,
           brand: trimmedBrand,
+          serialNumber: trimmedSerial || null,
           status: "Available",
           purchaseDate: new Date().toISOString().slice(0, 10),
-          notes: `Serial: ${trimmedSerial}`,
+          notes: trimmedNotes || null,
           history: `Category: ${category || "Other"}`,
         }),
       });
@@ -200,9 +180,10 @@ export default function AdminPanelPage() {
           id: created.id,
           name: created.name,
           brand: created.brand,
-          serial: trimmedSerial,
+          serial: created.serialNumber || "",
           date: created.purchaseDate || new Date().toISOString().slice(0, 10),
           status: toUiStatus(created.status),
+          notes: created.notes,
           category: category || "Other",
         },
         ...prev,
@@ -365,6 +346,8 @@ export default function AdminPanelPage() {
         setSerial={setSerial}
         brand={brand}
         setBrand={setBrand}
+        notes={notes}
+        setNotes={setNotes}
         category={category}
         setCategory={setCategory}
         touched={touched}

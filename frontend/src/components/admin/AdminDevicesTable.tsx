@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import Box from "@mui/joy/Box";
 import Chip from "@mui/joy/Chip";
 import IconButton from "@mui/joy/IconButton";
@@ -42,6 +42,7 @@ export default function AdminDevicesTable(props: Props) {
     sortOrder,
     onSort,
   } = props;
+  const [expandedRowId, setExpandedRowId] = useState<number | null>(null);
 
   const labelFor = (
     field: "name" | "brand" | "serial" | "purchaseDate" | "status",
@@ -123,74 +124,117 @@ export default function AdminDevicesTable(props: Props) {
             </tr>
           ) : (
             rows.map((row) => (
-              <tr key={row.serial}>
-                <td>{row.name}</td>
-                <td>{row.brand}</td>
-                <td>{row.serial}</td>
-                <td>{row.date}</td>
-                <td>
-                  <Chip
-                    size="sm"
-                    sx={{
-                      bgcolor:
-                        row.status === "In Repair"
-                          ? "#e11d48"
-                          : row.status === "Unknown"
-                            ? "#6b7280"
-                            : "#0b1220",
-                      color: "white",
-                      borderRadius: 999,
-                      minHeight: 16,
-                      fontSize: 8.5,
-                    }}
-                  >
-                    {row.status}
-                  </Chip>
-                </td>
-                <td>
-                  <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.35 }}>
-                    <IconButton
+              <React.Fragment key={row.id ?? `${row.name}-${row.serial}-${row.date}`}>
+                <tr
+                  onClick={() => {
+                    const rowId = row.id ?? null;
+                    if (rowId === null) {
+                      return;
+                    }
+                    setExpandedRowId((prev) => (prev === rowId ? null : rowId));
+                  }}
+                  style={{ cursor: row.id ? "pointer" : "default" }}
+                >
+                  <td>{row.name}</td>
+                  <td>{row.brand}</td>
+                  <td>{row.serial}</td>
+                  <td>{row.date}</td>
+                  <td>
+                    <Chip
                       size="sm"
-                      variant="plain"
-                      color="neutral"
-                      aria-label="Edit device"
-                      sx={{ "--IconButton-size": "18px", color: "#111827" }}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      size="sm"
-                      variant="plain"
-                      color="neutral"
-                      aria-label="Service device"
-                      loading={repairingSerial === row.serial}
-                      disabled={repairingSerial === row.serial}
-                      onClick={() => {
-                        if (row.status === "Rented") {
-                          onRequestReturn(row);
-                          return;
-                        }
-                        onRepair(row);
+                      sx={{
+                        bgcolor:
+                          row.status === "In Repair"
+                            ? "#e11d48"
+                            : row.status === "Unknown"
+                              ? "#6b7280"
+                              : "#0b1220",
+                        color: "white",
+                        borderRadius: 999,
+                        minHeight: 16,
+                        fontSize: 8.5,
                       }}
-                      sx={{ "--IconButton-size": "18px", color: "#111827" }}
                     >
-                      <WrenchIcon />
-                    </IconButton>
-                    <IconButton
-                      size="sm"
-                      variant="plain"
-                      color="danger"
-                      aria-label="Delete device"
-                      loading={deletingSerial === row.serial}
-                      disabled={deletingSerial === row.serial}
-                      onClick={() => onRequestDelete(row)}
-                      sx={{ "--IconButton-size": "18px" }}
-                    >
-                      <TrashIcon />
-                    </IconButton>
-                  </Box>
-                </td>
-              </tr>
+                      {row.status}
+                    </Chip>
+                  </td>
+                  <td>
+                    <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.35 }}>
+                      <IconButton
+                        size="sm"
+                        variant="plain"
+                        color="neutral"
+                        aria-label="Edit device"
+                        onClick={(event) => event.stopPropagation()}
+                        sx={{ "--IconButton-size": "18px", color: "#111827" }}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        size="sm"
+                        variant="plain"
+                        color="neutral"
+                        aria-label="Service device"
+                        loading={repairingSerial === row.serial}
+                        disabled={repairingSerial === row.serial}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (row.status === "Rented") {
+                            onRequestReturn(row);
+                            return;
+                          }
+                          onRepair(row);
+                        }}
+                        sx={{ "--IconButton-size": "18px", color: "#111827" }}
+                      >
+                        <WrenchIcon />
+                      </IconButton>
+                      <IconButton
+                        size="sm"
+                        variant="plain"
+                        color="danger"
+                        aria-label="Delete device"
+                        loading={deletingSerial === row.serial}
+                        disabled={deletingSerial === row.serial}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onRequestDelete(row);
+                        }}
+                        sx={{ "--IconButton-size": "18px" }}
+                      >
+                        <TrashIcon />
+                      </IconButton>
+                    </Box>
+                  </td>
+                </tr>
+                {expandedRowId === row.id ? (
+                  <tr>
+                    <td colSpan={6}>
+                      <Box
+                        sx={{
+                          p: 1,
+                          borderRadius: "sm",
+                          bgcolor: "#f8fafc",
+                          border: "1px solid #e5e7eb",
+                        }}
+                      >
+                        <Typography
+                          level="body-xs"
+                          sx={{ fontWeight: 600, color: "#111827", mb: 0.4 }}
+                        >
+                          Notes
+                        </Typography>
+                        <Typography
+                          level="body-xs"
+                          sx={{ whiteSpace: "pre-wrap", color: "#4b5563" }}
+                        >
+                          {row.notes?.trim() || "No notes for this device."}
+                        </Typography>
+                      </Box>
+                    </td>
+                  </tr>
+                ) : null}
+              </React.Fragment>
             ))
           )}
         </tbody>
