@@ -79,7 +79,11 @@ export default function App() {
             path="/admin-panel"
             element={
               meState.status === "authed" ? (
-                <AdminPanelPage />
+                meState.me.role === "admin" ? (
+                  <AdminPanelPage />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
               ) : (
                 <Navigate to="/login" replace />
               )

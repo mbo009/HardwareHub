@@ -6,6 +6,7 @@ export type Row = {
   date: string;
   status: "Available" | "Rented" | "In Repair" | "Unknown";
   notes?: string | null;
+  assignedTo?: string | null;
   category?: string;
 };
 
@@ -34,6 +35,18 @@ export type HardwareListItem = {
   serialNumber: string | null;
   purchaseDate: string | null;
   status: "Available" | "In Use" | "Repair" | "Unknown";
+  assignedTo: string | null;
+  notes: string | null;
+};
+
+export type HardwareUpdateResponse = {
+  id: number;
+  name: string;
+  brand: string;
+  serialNumber: string | null;
+  purchaseDate: string | null;
+  status: "Available" | "In Use" | "Repair" | "Unknown";
+  assignedTo: string | null;
   notes: string | null;
 };
 

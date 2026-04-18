@@ -18,6 +18,7 @@ type Props = {
   deletingSerial: string | null;
   repairingSerial: string | null;
   onRequestDelete: (row: Row) => void;
+  onRequestEdit: (row: Row) => void;
   onRepair: (row: Row) => void;
   onRequestReturn: (row: Row) => void;
   sortBy: "name" | "brand" | "serial" | "purchaseDate" | "status";
@@ -36,6 +37,7 @@ export default function AdminDevicesTable(props: Props) {
     deletingSerial,
     repairingSerial,
     onRequestDelete,
+    onRequestEdit,
     onRepair,
     onRequestReturn,
     sortBy,
@@ -165,7 +167,10 @@ export default function AdminDevicesTable(props: Props) {
                         variant="plain"
                         color="neutral"
                         aria-label="Edit device"
-                        onClick={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onRequestEdit(row);
+                        }}
                         sx={{ "--IconButton-size": "18px", color: "#111827" }}
                       >
                         <EditIcon />

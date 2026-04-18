@@ -9,11 +9,13 @@ import AdminDevicesTable from "../components/admin/AdminDevicesTable";
 import AdminFilters from "../components/admin/AdminFilters";
 import ConfirmDeleteModal from "../components/admin/ConfirmDeleteModal";
 import ConfirmReturnModal from "../components/admin/ConfirmReturnModal";
+import EditDeviceModal from "../components/admin/EditDeviceModal";
 import type {
   HardwareCreateResponse,
   HardwareListItem,
   HardwareListResponse,
   HardwareRepairResponse,
+  HardwareUpdateResponse,
   Row,
 } from "../components/admin/types";
 
@@ -46,6 +48,15 @@ export default function AdminPanelPage() {
   const [repairNotice, setRepairNotice] = useState<string | null>(null);
   const [pendingDeleteRow, setPendingDeleteRow] = useState<Row | null>(null);
   const [pendingRepairRow, setPendingRepairRow] = useState<Row | null>(null);
+  const [pendingEditRow, setPendingEditRow] = useState<Row | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editBrand, setEditBrand] = useState("");
+  const [editSerial, setEditSerial] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editAssignedTo, setEditAssignedTo] = useState("");
+  const [editStatus, setEditStatus] = useState<Row["status"]>("Available");
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const existingSerials = useMemo(
     () => new Set(rows.map((row) => row.serial.toLowerCase())),
@@ -136,6 +147,7 @@ export default function AdminPanelPage() {
           serial: item.serialNumber || "",
           date: item.purchaseDate || "-",
           status: toUiStatus(item.status),
+          assignedTo: item.assignedTo,
           notes: item.notes,
         }));
         setRows(mapped);
@@ -298,6 +310,99 @@ export default function AdminPanelPage() {
     setPendingRepairRow(null);
   };
 
+  const closeEditModal = () => {
+    if (isEditSubmitting) {
+      return;
+    }
+    setPendingEditRow(null);
+    setEditError(null);
+  };
+
+  const openEditModal = (row: Row) => {
+    setEditError(null);
+    setPendingEditRow(row);
+    setEditName(row.name);
+    setEditBrand(row.brand);
+    setEditSerial(row.serial);
+    setEditNotes(row.notes || "");
+    setEditAssignedTo(row.assignedTo || "");
+    setEditStatus(row.status);
+  };
+
+  const saveDeviceChanges = async () => {
+    if (!pendingEditRow?.id) {
+      return;
+    }
+
+    const trimmedEditName = editName.trim();
+    const trimmedEditBrand = editBrand.trim();
+    const trimmedEditSerial = editSerial.trim();
+    const trimmedEditNotes = editNotes.trim();
+    const normalizedEmail = editAssignedTo.trim().toLowerCase();
+
+    if (!trimmedEditName || !trimmedEditBrand) {
+      setEditError("Name and brand are required.");
+      return;
+    }
+
+    if (editStatus === "Rented" && !normalizedEmail) {
+      setEditError("Provide user email to set status to rented.");
+      return;
+    }
+
+    const apiStatus =
+      normalizedEmail
+        ? "In Use"
+        : editStatus === "Rented"
+          ? "In Use"
+          : editStatus === "In Repair"
+            ? "Repair"
+            : editStatus;
+
+    setIsEditSubmitting(true);
+    setEditError(null);
+    try {
+      await apiFetch<HardwareUpdateResponse>(
+        `/api/admin/hardware/${pendingEditRow.id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            name: trimmedEditName,
+            brand: trimmedEditBrand,
+            serialNumber: trimmedEditSerial || null,
+            notes: trimmedEditNotes || null,
+            status: apiStatus,
+            assignedTo: normalizedEmail || null,
+          }),
+        },
+      );
+      closeEditModal();
+      loadRows();
+    } catch (error) {
+      const err = error as ApiError;
+      const errorCode =
+        err?.data && typeof err.data === "object" && "error" in err.data
+          ? String((err.data as { error?: string }).error || "")
+          : "";
+
+      if (err?.status === 400 && errorCode === "assigned_user_not_found") {
+        setEditError("Assigned user does not exist.");
+      } else if (
+        err?.status === 400 && errorCode === "assigned_to_required_for_in_use"
+      ) {
+        setEditError("Assigned email is required for rented status.");
+      } else if (err?.status === 401) {
+        setEditError("Session expired. Please log in again.");
+      } else if (err?.status === 403) {
+        setEditError("Only admins can edit devices.");
+      } else {
+        setEditError("Could not update device. Try again.");
+      }
+    } finally {
+      setIsEditSubmitting(false);
+    }
+  };
+
   return (
     <AppShell title="Hardware Management">
       <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 0.7, width: "100%", maxWidth: 790 }}>
@@ -382,6 +487,29 @@ export default function AdminPanelPage() {
         }}
       />
 
+      <EditDeviceModal
+        open={Boolean(pendingEditRow)}
+        row={pendingEditRow}
+        name={editName}
+        setName={setEditName}
+        brand={editBrand}
+        setBrand={setEditBrand}
+        serial={editSerial}
+        setSerial={setEditSerial}
+        notes={editNotes}
+        setNotes={setEditNotes}
+        assignedTo={editAssignedTo}
+        setAssignedTo={setEditAssignedTo}
+        status={editStatus}
+        setStatus={setEditStatus}
+        isSubmitting={isEditSubmitting}
+        submitError={editError}
+        onClose={closeEditModal}
+        onSubmit={() => {
+          void saveDeviceChanges();
+        }}
+      />
+
       <AdminDevicesTable
         rows={rows}
         isLoadingRows={isLoadingRows}
@@ -395,6 +523,7 @@ export default function AdminPanelPage() {
           setDeleteError(null);
           setPendingDeleteRow(row);
         }}
+        onRequestEdit={openEditModal}
         onRequestReturn={setPendingRepairRow}
         onRepair={(row) => {
           void markInRepair(row);

@@ -9,6 +9,7 @@ import Sheet from "@mui/joy/Sheet";
 import Typography from "@mui/joy/Typography";
 import { NavLink, useLocation } from "react-router-dom";
 import { apiFetch } from "../api/client";
+import { useMe } from "../auth/useMe";
 import PackageIcon from "./PackageIcon";
 
 type AppShellProps = {
@@ -24,6 +25,11 @@ const navItems = [
 
 export default function AppShell({ title, children }: AppShellProps) {
   const location = useLocation();
+  const { state: meState } = useMe();
+  const isAdmin = meState.status === "authed" && meState.me.role === "admin";
+  const visibleNavItems = isAdmin
+    ? navItems
+    : navItems.filter((item) => item.to !== "/admin-panel");
 
   const onLogout = async () => {
     try {
@@ -73,7 +79,7 @@ export default function AppShell({ title, children }: AppShellProps) {
           </Box>
           <Divider sx={{ mx: 0.7 }} />
           <List size="sm" sx={{ gap: 0.25, px: 0.85, pt: 0.75 }}>
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const selected = location.pathname === item.to;
               return (
                 <ListItem key={item.to}>
