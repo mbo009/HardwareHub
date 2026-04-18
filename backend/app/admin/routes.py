@@ -76,6 +76,7 @@ def create_hardware():
     hardware = Hardware(
         name=name,
         brand=brand,
+        serial_number=(data.get("serialNumber") or "").strip() or None,
         status=status,
         purchase_date=purchase_date,
         assigned_to_email=(data.get("assignedTo") or "").strip() or None,
@@ -90,6 +91,7 @@ def create_hardware():
         "seedId": hardware.seed_id,
         "name": hardware.name,
         "brand": hardware.brand,
+        "serialNumber": hardware.serial_number,
         "purchaseDate": (
             hardware.purchase_date.isoformat()
             if hardware.purchase_date
@@ -126,6 +128,7 @@ def mark_hardware_repair(hardware_id):
         return jsonify({"error": "hardware_not_found"}), 404
 
     was_in_use = hardware.status == "In Use"
+
     if was_in_use:
         hardware.assigned_to_email = None
         hardware.status = "Available"
@@ -144,3 +147,77 @@ def mark_hardware_repair(hardware_id):
             "wasInUse": was_in_use,
         }
     ), 200
+
+
+@admin_bp.patch("/hardware/<int:hardware_id>")
+@admin_required
+def update_hardware(hardware_id):
+    hardware = db.session.get(Hardware, hardware_id)
+    if not hardware:
+        return jsonify({"error": "hardware_not_found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    allowed_fields = {"name", "brand", "serialNumber", "status", "assignedTo"}
+    if not any(field in data for field in allowed_fields):
+        return jsonify({"error": "no_fields_to_update"}), 400
+
+    if "name" in data:
+        name = (data.get("name") or "").strip()
+        if not name:
+            return jsonify({"error": "invalid_name"}), 400
+        hardware.name = name
+
+    if "brand" in data:
+        brand = (data.get("brand") or "").strip()
+        if not brand:
+            return jsonify({"error": "invalid_brand"}), 400
+        hardware.brand = brand
+
+    if "serialNumber" in data:
+        serial = (data.get("serialNumber") or "").strip()
+        hardware.serial_number = serial or None
+
+    final_status = hardware.status
+    if "status" in data:
+        requested_status = (data.get("status") or "").strip()
+        if requested_status not in VALID_HARDWARE_STATUSES:
+            return jsonify({"error": "invalid_status"}), 400
+        final_status = requested_status
+
+    final_assigned = hardware.assigned_to_email
+    if "assignedTo" in data:
+        assigned = (data.get("assignedTo") or "").strip().lower()
+        final_assigned = assigned or None
+
+    if final_status == "In Use":
+        if not final_assigned:
+            return jsonify({"error": "assigned_to_required_for_in_use"}), 400
+        assigned_user = User.query.filter_by(email=final_assigned).first()
+        if not assigned_user:
+            return jsonify({"error": "assigned_user_not_found"}), 400
+    else:
+        if "assignedTo" in data and final_assigned:
+            return jsonify({"error": "assigned_to_requires_in_use"}), 400
+        final_assigned = None
+
+    hardware.status = final_status
+    hardware.assigned_to_email = final_assigned
+    db.session.commit()
+
+    payload = {
+        "id": hardware.id,
+        "seedId": hardware.seed_id,
+        "name": hardware.name,
+        "brand": hardware.brand,
+        "serialNumber": hardware.serial_number,
+        "purchaseDate": (
+            hardware.purchase_date.isoformat()
+            if hardware.purchase_date
+            else None
+        ),
+        "status": hardware.status,
+        "assignedTo": hardware.assigned_to_email,
+        "notes": hardware.notes,
+        "history": hardware.history_text,
+    }
+    return jsonify(payload), 200

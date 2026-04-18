@@ -77,6 +77,7 @@ def main():
                 seed_id=seed_id,
                 name=item.get("name") or "",
                 brand=item.get("brand") or "",
+                serial_number=(item.get("serialNumber") or None),
                 purchase_date=purchase_date,
                 status=status,
                 assigned_to_email=assigned_to_email,

@@ -15,6 +15,7 @@ def to_payload(item: Hardware):
         "seedId": item.seed_id,
         "name": item.name,
         "brand": item.brand,
+        "serialNumber": item.serial_number,
         "purchaseDate": (
             item.purchase_date.isoformat()
             if item.purchase_date
@@ -84,6 +85,7 @@ def list_hardware():
         sort_map = {
             "name": Hardware.name,
             "brand": Hardware.brand,
+            "serialNumber": Hardware.serial_number,
             "purchaseDate": Hardware.purchase_date,
         }
         sort_col = sort_map.get(sort_by, Hardware.name)

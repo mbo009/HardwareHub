@@ -14,6 +14,7 @@ class Hardware(db.Model):
     seed_id = db.Column(db.Integer, nullable=True)
     name = db.Column(db.String(255), nullable=False)
     brand = db.Column(db.String(255), nullable=False, default="")
+    serial_number = db.Column(db.String(255), nullable=True, index=True)
     purchase_date = db.Column(db.Date, nullable=True, index=True)
     status = db.Column(db.String(20), nullable=False, index=True)
     assigned_to_email = db.Column(db.String(255), nullable=True, index=True)

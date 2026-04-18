@@ -58,6 +58,7 @@ def test_admin_create_hardware_success(client, app):
         json={
             "name": "MacBook Pro 16",
             "brand": "Apple",
+            "serialNumber": "MBP-2026-001",
             "purchaseDate": "2026-03-01",
             "status": "Available",
             "assignedTo": "user@test.com",
@@ -69,6 +70,7 @@ def test_admin_create_hardware_success(client, app):
     data = res.get_json()
     assert data["name"] == "MacBook Pro 16"
     assert data["brand"] == "Apple"
+    assert data["serialNumber"] == "MBP-2026-001"
     assert data["purchaseDate"] == "2026-03-01"
     assert data["status"] == "Available"
     assert data["assignedTo"] == "user@test.com"
@@ -249,3 +251,142 @@ def test_admin_mark_hardware_repair_toggles_repair_to_available(client, app):
         updated = db.session.get(Hardware, row_id)
         assert updated is not None
         assert updated.status == "Available"
+
+
+def test_admin_update_hardware_requires_auth(client, app):
+    from app.db import db
+    from app.models import Hardware
+
+    with app.app_context():
+        row = Hardware(
+            name="Old Device",
+            brand="Old Brand",
+            status="Available",
+        )
+        db.session.add(row)
+        db.session.commit()
+        row_id = row.id
+
+    res = client.patch(
+        f"/api/admin/hardware/{row_id}",
+        json={"name": "New Device"},
+    )
+    assert res.status_code == 401
+
+
+def test_admin_update_hardware_forbidden_for_non_admin(client, app):
+    from app.db import db
+    from app.models import Hardware
+
+    with app.app_context():
+        row = Hardware(
+            name="Old Device",
+            brand="Old Brand",
+            status="Available",
+        )
+        db.session.add(row)
+        db.session.commit()
+        row_id = row.id
+
+    login_user(client)
+    res = client.patch(
+        f"/api/admin/hardware/{row_id}",
+        json={"name": "New Device"},
+    )
+    assert res.status_code == 403
+
+
+def test_admin_update_hardware_updates_name_brand_and_serial(client, app):
+    from app.db import db
+    from app.models import Hardware
+
+    with app.app_context():
+        row = Hardware(
+            name="Old Device",
+            brand="Old Brand",
+            status="Available",
+        )
+        db.session.add(row)
+        db.session.commit()
+        row_id = row.id
+
+    login_admin(client)
+    res = client.patch(
+        f"/api/admin/hardware/{row_id}",
+        json={
+            "name": "MacBook Pro 14",
+            "brand": "Apple",
+            "serialNumber": "MBP-2026-001",
+        },
+    )
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["name"] == "MacBook Pro 14"
+    assert data["brand"] == "Apple"
+    assert data["serialNumber"] == "MBP-2026-001"
+
+
+def test_admin_update_hardware_sets_in_use_with_assigned_user(client, app):
+    from app.db import db
+    from app.models import Hardware
+
+    with app.app_context():
+        row = Hardware(name="Device", brand="Brand", status="Available")
+        db.session.add(row)
+        db.session.commit()
+        row_id = row.id
+
+    login_admin(client)
+    res = client.patch(
+        f"/api/admin/hardware/{row_id}",
+        json={"status": "In Use", "assignedTo": "user@test.com"},
+    )
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["status"] == "In Use"
+    assert data["assignedTo"] == "user@test.com"
+
+
+def test_admin_update_hardware_in_use_requires_assigned_user(client, app):
+    from app.db import db
+    from app.models import Hardware
+
+    with app.app_context():
+        row = Hardware(name="Device", brand="Brand", status="Available")
+        db.session.add(row)
+        db.session.commit()
+        row_id = row.id
+
+    login_admin(client)
+    res = client.patch(
+        f"/api/admin/hardware/{row_id}",
+        json={"status": "In Use"},
+    )
+    assert res.status_code == 400
+    assert res.get_json()["error"] == "assigned_to_required_for_in_use"
+
+
+def test_admin_update_hardware_clears_assignment_when_not_in_use(client, app):
+    from app.db import db
+    from app.models import Hardware
+
+    with app.app_context():
+        row = Hardware(
+            name="Device",
+            brand="Brand",
+            status="In Use",
+            assigned_to_email="user@test.com",
+        )
+        db.session.add(row)
+        db.session.commit()
+        row_id = row.id
+
+    login_admin(client)
+    res = client.patch(
+        f"/api/admin/hardware/{row_id}",
+        json={"status": "Available"},
+    )
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["status"] == "Available"
+    assert data["assignedTo"] is None
