@@ -157,7 +157,14 @@ def update_hardware(hardware_id):
         return jsonify({"error": "hardware_not_found"}), 404
 
     data = request.get_json(silent=True) or {}
-    allowed_fields = {"name", "brand", "serialNumber", "status", "assignedTo"}
+    allowed_fields = {
+        "name",
+        "brand",
+        "serialNumber",
+        "notes",
+        "status",
+        "assignedTo",
+    }
     if not any(field in data for field in allowed_fields):
         return jsonify({"error": "no_fields_to_update"}), 400
 
@@ -176,6 +183,16 @@ def update_hardware(hardware_id):
     if "serialNumber" in data:
         serial = (data.get("serialNumber") or "").strip()
         hardware.serial_number = serial or None
+
+    if "notes" in data:
+        notes = data.get("notes")
+        if notes is None:
+            hardware.notes = None
+        elif isinstance(notes, str):
+            cleaned = notes.strip()
+            hardware.notes = cleaned or None
+        else:
+            return jsonify({"error": "invalid_notes"}), 400
 
     final_status = hardware.status
     if "status" in data:
