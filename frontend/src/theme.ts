@@ -2,8 +2,8 @@ import { extendTheme } from "@mui/joy/styles";
 
 export const theme = extendTheme({
   fontFamily: {
-    body: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
-    display: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    body: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    display: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
   },
   colorSchemes: {
     light: {

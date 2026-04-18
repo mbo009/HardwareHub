@@ -9,6 +9,8 @@ import Sheet from "@mui/joy/Sheet";
 import Typography from "@mui/joy/Typography";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../api/client";
+import type { Me } from "../auth/useMe";
+import PackageIcon from "../components/PackageIcon";
 
 function isBooksyEmail(email: string) {
   const value = email.trim().toLowerCase();
@@ -29,7 +31,11 @@ function getDomainErrorForTyping(email: string): string | null {
   return "Invalid domain. Please use @booksy.com";
 }
 
-export default function LoginPage() {
+type LoginPageProps = {
+  onLoginSuccess?: (me: Me) => void;
+};
+
+export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const navigate = useNavigate();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -49,10 +55,11 @@ export default function LoginPage() {
     setDomainError(null);
     setSubmitting(true);
     try {
-      await apiFetch("/api/auth/login", {
+      const me = await apiFetch<Me>("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
+      onLoginSuccess?.(me);
       navigate("/dashboard", { replace: true });
     } catch {
       setLoginError("Invalid email or password");
@@ -104,28 +111,7 @@ export default function LoginPage() {
               },
             }}
           >
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              aria-hidden="true"
-            >
-              <path
-                d="M12 3L4 7.5V16.5L12 21L20 16.5V7.5L12 3Z"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M12 3V12M12 12L20 7.5M12 12L4 7.5"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <PackageIcon size={22} color="currentColor" />
           </Box>
         </Box>
 

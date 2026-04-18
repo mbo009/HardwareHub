@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../api/client";
 
 export type Me = {
@@ -14,22 +14,24 @@ type State =
 export function useMe() {
   const [state, setState] = useState<State>({ status: "loading" });
 
-  useEffect(() => {
-    let cancelled = false;
-
+  const refresh = useCallback(async () => {
     apiFetch<Me>("/api/auth/me")
       .then((me) => {
-        if (!cancelled) setState({ status: "authed", me });
+        setState({ status: "authed", me });
       })
       .catch(() => {
-        if (!cancelled) setState({ status: "anonymous" });
+        setState({ status: "anonymous" });
       });
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
-  return state;
+  const setAuthed = useCallback((me: Me) => {
+    setState({ status: "authed", me });
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  return { state, refresh, setAuthed };
 }
 

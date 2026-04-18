@@ -19,12 +19,19 @@ export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  const method = (init?.method || "GET").toUpperCase();
+  const hasBody = init?.body !== undefined && init?.body !== null;
+  const headers: Record<string, string> = {
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+
+  if (hasBody && method !== "GET" && method !== "HEAD") {
+    headers["Content-Type"] = headers["Content-Type"] || "application/json";
+  }
+
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers || {}),
-    },
+    headers,
     credentials: "include",
   });
 
