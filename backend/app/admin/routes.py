@@ -116,3 +116,31 @@ def delete_hardware(hardware_id):
     db.session.delete(hardware)
     db.session.commit()
     return jsonify({"ok": True}), 200
+
+
+@admin_bp.patch("/hardware/<int:hardware_id>/repair")
+@admin_required
+def mark_hardware_repair(hardware_id):
+    hardware = db.session.get(Hardware, hardware_id)
+    if not hardware:
+        return jsonify({"error": "hardware_not_found"}), 404
+
+    was_in_use = hardware.status == "In Use"
+    if was_in_use:
+        hardware.assigned_to_email = None
+        hardware.status = "Available"
+    elif hardware.status == "Repair":
+        hardware.status = "Available"
+    else:
+        hardware.status = "Repair"
+
+    db.session.commit()
+
+    return jsonify(
+        {
+            "id": hardware.id,
+            "status": hardware.status,
+            "assignedTo": hardware.assigned_to_email,
+            "wasInUse": was_in_use,
+        }
+    ), 200

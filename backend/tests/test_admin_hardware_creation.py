@@ -160,3 +160,92 @@ def test_admin_delete_hardware_success(client, app):
     with app.app_context():
         deleted = db.session.get(Hardware, row_id)
         assert deleted is None
+
+
+def test_admin_mark_hardware_repair_requires_auth(client, app):
+    from app.db import db
+    from app.models import Hardware
+
+    with app.app_context():
+        row = Hardware(name="Needs Repair", brand="Test", status="Available")
+        db.session.add(row)
+        db.session.commit()
+        row_id = row.id
+
+    res = client.patch(f"/api/admin/hardware/{row_id}/repair")
+    assert res.status_code == 401
+
+
+def test_admin_mark_hardware_repair_forbidden_for_non_admin(client, app):
+    from app.db import db
+    from app.models import Hardware
+
+    with app.app_context():
+        row = Hardware(name="Needs Repair", brand="Test", status="Available")
+        db.session.add(row)
+        db.session.commit()
+        row_id = row.id
+
+    login_user(client)
+    res = client.patch(f"/api/admin/hardware/{row_id}/repair")
+    assert res.status_code == 403
+
+
+def test_admin_mark_hardware_repair_not_found(client):
+    login_admin(client)
+    res = client.patch("/api/admin/hardware/999999/repair")
+    assert res.status_code == 404
+    assert res.get_json()["error"] == "hardware_not_found"
+
+
+def test_admin_mark_hardware_repair_unassigns_in_use_device(client, app):
+    from app.db import db
+    from app.models import Hardware
+
+    with app.app_context():
+        row = Hardware(
+            name="Leased Device",
+            brand="Test",
+            status="In Use",
+            assigned_to_email="user@test.com",
+        )
+        db.session.add(row)
+        db.session.commit()
+        row_id = row.id
+
+    login_admin(client)
+    res = client.patch(f"/api/admin/hardware/{row_id}/repair")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["status"] == "Available"
+    assert data["assignedTo"] is None
+    assert data["wasInUse"] is True
+
+    with app.app_context():
+        updated = db.session.get(Hardware, row_id)
+        assert updated is not None
+        assert updated.status == "Available"
+        assert updated.assigned_to_email is None
+
+
+def test_admin_mark_hardware_repair_toggles_repair_to_available(client, app):
+    from app.db import db
+    from app.models import Hardware
+
+    with app.app_context():
+        row = Hardware(name="Repair Device", brand="Test", status="Repair")
+        db.session.add(row)
+        db.session.commit()
+        row_id = row.id
+
+    login_admin(client)
+    res = client.patch(f"/api/admin/hardware/{row_id}/repair")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["status"] == "Available"
+    assert data["wasInUse"] is False
+
+    with app.app_context():
+        updated = db.session.get(Hardware, row_id)
+        assert updated is not None
+        assert updated.status == "Available"
