@@ -1,6 +1,7 @@
 import React from "react";
 import Box from "@mui/joy/Box";
 import Button from "@mui/joy/Button";
+import Checkbox from "@mui/joy/Checkbox";
 import FormControl from "@mui/joy/FormControl";
 import FormLabel from "@mui/joy/FormLabel";
 import Input from "@mui/joy/Input";
@@ -13,6 +14,8 @@ type Props = {
   open: boolean;
   email: string;
   setEmail: (value: string) => void;
+  adminPrivileges: boolean;
+  setAdminPrivileges: (value: boolean) => void;
   isSubmitting: boolean;
   submitError: string | null;
   generatedPassword: string | null;
@@ -25,6 +28,8 @@ export default function CreateUserModal(props: Props) {
     open,
     email,
     setEmail,
+    adminPrivileges,
+    setAdminPrivileges,
     isSubmitting,
     submitError,
     generatedPassword,
@@ -64,6 +69,25 @@ export default function CreateUserModal(props: Props) {
             type="email"
             sx={{ fontSize: 12, minHeight: 40, borderRadius: 12 }}
           />
+        </FormControl>
+
+        <FormControl sx={{ mt: 1 }}>
+          <Checkbox
+            size="sm"
+            checked={adminPrivileges}
+            onChange={(event) => setAdminPrivileges(event.target.checked)}
+            label={
+              <Typography sx={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>
+                Admin privileges
+              </Typography>
+            }
+            slotProps={{
+              label: { sx: { ml: 0.5 } },
+            }}
+          />
+          <Typography level="body-xs" sx={{ mt: 0.35, ml: 3.2, color: "#6b7280" }}>
+            New user can access Admin Panel and manage hardware and accounts.
+          </Typography>
         </FormControl>
 
         {generatedPassword ? (

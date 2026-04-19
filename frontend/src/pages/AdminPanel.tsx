@@ -61,6 +61,7 @@ export default function AdminPanelPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [openCreateUser, setOpenCreateUser] = useState(false);
   const [createUserEmail, setCreateUserEmail] = useState("");
+  const [createUserAsAdmin, setCreateUserAsAdmin] = useState(false);
   const [createUserSubmitting, setCreateUserSubmitting] = useState(false);
   const [createUserError, setCreateUserError] = useState<string | null>(null);
   const [generatedTempPassword, setGeneratedTempPassword] = useState<
@@ -333,6 +334,7 @@ export default function AdminPanelPage() {
     }
     setOpenCreateUser(false);
     setCreateUserEmail("");
+    setCreateUserAsAdmin(false);
     setCreateUserError(null);
     setGeneratedTempPassword(null);
   };
@@ -355,7 +357,7 @@ export default function AdminPanelPage() {
         method: "POST",
         body: JSON.stringify({
           email,
-          role: "user",
+          role: createUserAsAdmin ? "admin" : "user",
         }),
       });
       setGeneratedTempPassword(response.temporaryPassword);
@@ -491,7 +493,10 @@ export default function AdminPanelPage() {
           size="sm"
           variant="outlined"
           color="neutral"
-          onClick={() => setOpenCreateUser(true)}
+          onClick={() => {
+            setCreateUserAsAdmin(false);
+            setOpenCreateUser(true);
+          }}
           sx={{
             minHeight: 24,
             fontSize: 9.6,
@@ -574,6 +579,8 @@ export default function AdminPanelPage() {
         open={openCreateUser}
         email={createUserEmail}
         setEmail={setCreateUserEmail}
+        adminPrivileges={createUserAsAdmin}
+        setAdminPrivileges={setCreateUserAsAdmin}
         isSubmitting={createUserSubmitting}
         submitError={createUserError}
         generatedPassword={generatedTempPassword}
