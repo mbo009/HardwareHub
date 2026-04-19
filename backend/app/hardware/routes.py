@@ -1,7 +1,7 @@
 from datetime import date
 
 from flask import Blueprint, jsonify, request, session
-from sqlalchemy import and_, case
+from sqlalchemy import and_, case, or_
 
 from app.auth.decorators import login_required
 from app.db import db
@@ -45,8 +45,16 @@ def list_hardware():
             and_(
                 Hardware.purchase_date.isnot(None),
                 Hardware.purchase_date > date.today(),
-                Hardware.status.in_(("Available", "Unknown")),
+                Hardware.status.in_(["Available", "Unknown"]),
             )
+        )
+    elif status == "Available":
+        query = query.filter(
+            Hardware.status == "Available",
+            or_(
+                Hardware.purchase_date.is_(None),
+                Hardware.purchase_date <= date.today(),
+            ),
         )
     elif status:
         query = query.filter(Hardware.status == status)

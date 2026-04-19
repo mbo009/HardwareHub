@@ -59,13 +59,28 @@ def test_hardware_list_returns_rows_for_logged_user(client, app):
 
 
 def test_hardware_list_status_filter(client, app):
+    from app.db import db
+    from app.models import Hardware
+
     seed_hardware(app)
+    with app.app_context():
+        db.session.add(
+            Hardware(
+                name="Future Available",
+                brand="Acme",
+                purchase_date=date.today() + timedelta(days=30),
+                status="Available",
+            ),
+        )
+        db.session.commit()
+
     login_user(client)
     res = client.get("/api/hardware?status=Available")
     assert res.status_code == 200
     data = res.get_json()
-    assert len(data["items"]) == 1
-    assert data["items"][0]["name"] == "MacBook Pro 16"
+    names = [item["name"] for item in data["items"]]
+    assert names == ["MacBook Pro 16"]
+    assert "Future Available" not in names
 
 
 def test_hardware_list_search_filter(client, app):
