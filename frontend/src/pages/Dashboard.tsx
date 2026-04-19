@@ -5,6 +5,7 @@ import Chip from "@mui/joy/Chip";
 import Input from "@mui/joy/Input";
 import Sheet from "@mui/joy/Sheet";
 import Table from "@mui/joy/Table";
+import Typography from "@mui/joy/Typography";
 import AppShell from "../components/AppShell";
 import { apiFetch, type ApiError } from "../api/client";
 import { useMe } from "../auth/useMe";
@@ -32,6 +33,8 @@ function toUiStatus(status: HardwareItem["status"]) {
   return status;
 }
 
+const PAGE_SIZE = 20;
+
 export default function DashboardPage() {
   const { state: meState } = useMe();
   const [rows, setRows] = React.useState<HardwareItem[]>([]);
@@ -39,29 +42,38 @@ export default function DashboardPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
   const [pendingRowId, setPendingRowId] = React.useState<number | null>(null);
+  const [page, setPage] = React.useState(1);
+  const [totalPages, setTotalPages] = React.useState(1);
 
-  const reload = React.useCallback(() => {
-    return apiFetch<HardwareListResponse>("/api/hardware?page=1&limit=20")
+  const loadList = React.useCallback(() => {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("limit", String(PAGE_SIZE));
+    return apiFetch<HardwareListResponse>(`/api/hardware?${params.toString()}`)
       .then((data) => {
+        const tp = Math.max(1, data.totalPages);
+        setTotalPages(tp);
         setRows(data.items);
         setError(null);
+        if (page > tp) {
+          setPage(tp);
+        }
       })
       .catch(() => {
         setError("Could not load hardware list.");
       });
-  }, []);
+  }, [page]);
 
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    reload()
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    loadList().finally(() => {
+      if (!cancelled) setLoading(false);
+    });
     return () => {
       cancelled = true;
     };
-  }, [reload]);
+  }, [loadList]);
 
   const myEmail =
     meState.status === "authed" ? meState.me.email.trim().toLowerCase() : "";
@@ -74,7 +86,7 @@ export default function DashboardPage() {
         ? `/api/hardware/${row.id}/rent`
         : `/api/hardware/${row.id}/return`;
     apiFetch<HardwareItem>(path, { method: "POST" })
-      .then(() => reload())
+      .then(() => loadList())
       .catch((err) => {
         const apiErr = err as ApiError;
         const code =
@@ -215,6 +227,38 @@ export default function DashboardPage() {
           </tbody>
         </Table>
       </Sheet>
+      <Box
+        sx={{
+          width: "100%",
+          maxWidth: 790,
+          mt: 0.7,
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 0.8,
+        }}
+      >
+        <Button
+          size="sm"
+          variant="outlined"
+          color="neutral"
+          disabled={page <= 1 || loading}
+          onClick={() => setPage((p) => Math.max(1, p - 1))}
+        >
+          Prev
+        </Button>
+        <Typography level="body-sm" sx={{ alignSelf: "center", color: "#6b7280" }}>
+          Page {page} of {totalPages}
+        </Typography>
+        <Button
+          size="sm"
+          variant="outlined"
+          color="neutral"
+          disabled={page >= totalPages || loading}
+          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+        >
+          Next
+        </Button>
+      </Box>
     </AppShell>
   );
 }
