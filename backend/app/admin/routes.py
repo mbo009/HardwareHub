@@ -97,12 +97,13 @@ def create_hardware():
     if status not in VALID_HARDWARE_STATUSES:
         return jsonify({"error": "invalid_status"}), 400
 
-    purchase_date = None
     if purchase_date_raw:
         try:
             purchase_date = date.fromisoformat(purchase_date_raw)
         except ValueError:
             return jsonify({"error": "invalid_purchase_date"}), 400
+    else:
+        purchase_date = date.today()
 
     hardware = Hardware(
         name=name,

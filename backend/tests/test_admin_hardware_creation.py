@@ -48,6 +48,18 @@ def test_admin_create_hardware_validates_status(client):
     assert res.get_json()["error"] == "invalid_status"
 
 
+def test_admin_create_hardware_defaults_purchase_date_to_today(client, app):
+    from datetime import date
+
+    login_admin(client)
+    res = client.post(
+        "/api/admin/hardware",
+        json={"name": "USB Hub", "brand": "Anker", "status": "Available"},
+    )
+    assert res.status_code == 201
+    assert res.get_json()["purchaseDate"] == date.today().isoformat()
+
+
 def test_admin_create_hardware_success(client, app):
     from app.db import db
     from app.models import Hardware

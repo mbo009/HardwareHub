@@ -3,9 +3,10 @@ from flask import Flask
 from flask_cors import CORS
 from sqlalchemy import text
 
+from .config import Config, refresh_llm_config_from_env
 from .admin import admin_bp
+from .assistant import assistant_bp
 from .hardware import hardware_bp
-from .config import Config
 from .auth import auth_bp
 from .db import db
 from .routes import api_bp
@@ -65,6 +66,7 @@ def ensure_sqlite_schema_compat(app):
 def create_app():
     app = Flask(__name__, instance_relative_config=False)
     app.config.from_object(Config)
+    refresh_llm_config_from_env(app)
 
     os.makedirs(app.instance_path, exist_ok=True)
 
@@ -91,6 +93,7 @@ def create_app():
     app.register_blueprint(api_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(assistant_bp)
     app.register_blueprint(hardware_bp)
 
     @app.get("/")
