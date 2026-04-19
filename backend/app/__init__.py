@@ -19,10 +19,21 @@ def ensure_sqlite_schema_compat(app):
     with app.app_context():
         conn = db.engine.connect()
         try:
+            table_rows = conn.execute(
+                text(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type='table' AND name IN ('hardware', 'users')"
+                )
+            ).fetchall()
+            existing_tables = {row[0] for row in table_rows}
+
+            if "hardware" not in existing_tables and "users" not in existing_tables:
+                return
+
             result = conn.execute(text("PRAGMA table_info(hardware)"))
             columns = {row[1] for row in result.fetchall()}
 
-            if "serial_number" not in columns:
+            if "hardware" in existing_tables and "serial_number" not in columns:
                 conn.execute(
                     text("ALTER TABLE hardware ADD COLUMN serial_number VARCHAR(255)")
                 )
@@ -30,6 +41,20 @@ def ensure_sqlite_schema_compat(app):
                     text(
                         "CREATE INDEX IF NOT EXISTS "
                         "ix_hardware_serial_number ON hardware (serial_number)"
+                    )
+                )
+                conn.commit()
+
+            users_result = conn.execute(text("PRAGMA table_info(users)"))
+            user_columns = {row[1] for row in users_result.fetchall()}
+            if (
+                "users" in existing_tables
+                and "must_change_password" not in user_columns
+            ):
+                conn.execute(
+                    text(
+                        "ALTER TABLE users "
+                        "ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT 0"
                     )
                 )
                 conn.commit()

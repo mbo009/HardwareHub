@@ -1,8 +1,9 @@
 from flask import Blueprint, jsonify, request, session
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.db import db
 from app.models import User
+from app.security import validate_password
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
@@ -18,7 +19,13 @@ def me():
         session.clear()
         return jsonify({"error": "unauthorized"}), 401
 
-    return jsonify({"email": user.email, "role": user.role})
+    return jsonify(
+        {
+            "email": user.email,
+            "role": user.role,
+            "mustChangePassword": bool(user.must_change_password),
+        }
+    )
 
 
 @auth_bp.post("/login")
@@ -41,7 +48,43 @@ def login():
     session.clear()
     session["user_id"] = user.id
 
-    return jsonify({"email": user.email, "role": user.role})
+    return jsonify(
+        {
+            "email": user.email,
+            "role": user.role,
+            "mustChangePassword": bool(user.must_change_password),
+        }
+    )
+
+
+@auth_bp.post("/change-password")
+def change_password():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "unauthorized"}), 401
+
+    user = db.session.get(User, user_id)
+    if not user or user.disabled_at is not None:
+        session.clear()
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    new_password = data.get("newPassword")
+    errors = validate_password(new_password)
+    if errors:
+        return jsonify({"error": "invalid_password", "details": errors}), 400
+
+    user.password_hash = generate_password_hash(new_password)
+    user.must_change_password = False
+    db.session.commit()
+
+    return jsonify(
+        {
+            "email": user.email,
+            "role": user.role,
+            "mustChangePassword": bool(user.must_change_password),
+        }
+    )
 
 
 @auth_bp.post("/logout")

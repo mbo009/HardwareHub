@@ -1,4 +1,6 @@
 from datetime import date
+import secrets
+import string
 
 from flask import Blueprint, jsonify, request
 from werkzeug.security import generate_password_hash
@@ -12,14 +14,31 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 VALID_HARDWARE_STATUSES = {"Available", "In Use", "Repair", "Unknown"}
 
 
+def generate_temporary_password(length=12):
+    required_sets = [
+        string.ascii_uppercase,
+        string.ascii_lowercase,
+        string.digits,
+        "!@#$%^&*()_+-=",
+    ]
+    chars = [secrets.choice(charset) for charset in required_sets]
+    pool = "".join(required_sets)
+    while len(chars) < length:
+        chars.append(secrets.choice(pool))
+    secrets.SystemRandom().shuffle(chars)
+    return "".join(chars)
+
+
 @admin_bp.post("/users")
 @admin_required
 def create_user():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True, force=True) or {}
 
     email = (data.get("email") or "").strip().lower()
-    password = data.get("password")
-    role = (data.get("role") or "user").strip().lower()
+    role_raw = data.get("role") or "user"
+    if not isinstance(role_raw, str):
+        return jsonify({"error": "invalid_role"}), 400
+    role = role_raw.strip().lower()
 
     if role not in {"admin", "user"}:
         return jsonify({"error": "invalid_role"}), 400
@@ -27,23 +46,34 @@ def create_user():
     if not email:
         return jsonify({"error": "invalid_email"}), 400
 
+    if not email.endswith("@booksy.com"):
+        return jsonify({"error": "invalid_email_domain"}), 400
+
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "email_already_exists"}), 409
 
-    errors = validate_password(password)
+    temporary_password = generate_temporary_password()
+    errors = validate_password(temporary_password)
     if errors:
-        return jsonify({"error": "invalid_password", "details": errors}), 400
+        return jsonify({"error": "temporary_password_generation_failed"}), 500
 
     user = User(
         email=email,
-        password_hash=generate_password_hash(password),
+        password_hash=generate_password_hash(temporary_password),
         role=role,
+        must_change_password=True,
     )
 
     db.session.add(user)
     db.session.commit()
 
-    payload = {"id": user.id, "email": user.email, "role": user.role}
+    payload = {
+        "id": user.id,
+        "email": user.email,
+        "role": user.role,
+        "temporaryPassword": temporary_password,
+        "mustChangePassword": user.must_change_password,
+    }
     return jsonify(payload), 201
 
 
