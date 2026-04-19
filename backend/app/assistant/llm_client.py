@@ -6,10 +6,9 @@ import urllib.error
 from typing import Any
 
 from app.assistant.llm_common import (
-    assistant_reply_from_model_raw,
-    effective_system_prompt,
     data_url_to_mime_and_bytes,
     data_url_to_ollama_b64,
+    effective_system_prompt,
     http_post_json,
     log_error,
     log_exception,
@@ -23,6 +22,7 @@ from app.assistant.model_capabilities import (
 OLLAMA_VISION_APPENDIX = (
     "\n\nYou receive the image(s) as input. Follow WHEN IMAGES ARE PRESENT above: "
     'lead "message" with visible details and a best-effort identification before asking for missing fields. '
+    "If the chat history mentions an earlier unrelated or joke image, ignore it for this turn — only describe the new photo(s). "
     "For purchaseDate default to today's SERVER CONTEXT date when appropriate; do not ask for purchase date in that case."
 )
 
@@ -47,157 +47,155 @@ def assistant_service_unavailable() -> dict[str, Any]:
     }
 
 
-def openai_assistant_reply(
+def complete_assistant_json_raw(
     messages: list[dict[str, str]],
     images: list[str] | None,
     *,
+    provider: str,
     api_key: str,
     model: str,
-) -> dict[str, Any]:
-    from openai import OpenAI
+    ollama_base_url: str,
+    ollama_image_mode: str,
+    vision_user_index: int | None,
+    system_prompt: str | None = None,
+) -> str:
+    """Single completion; returns raw model string (JSON)."""
+    sys_p = system_prompt if system_prompt is not None else effective_system_prompt()
+    prov = (provider or "mock").lower()
 
-    client = OpenAI(api_key=api_key, timeout=120.0, max_retries=2)
-    openai_messages: list[dict[str, Any]] = [{"role": "system", "content": effective_system_prompt()}]
+    if prov == "openai":
+        from openai import OpenAI
 
-    for i, m in enumerate(messages):
-        role = m.get("role")
-        content = m.get("content") or ""
-        if role not in ("user", "assistant"):
-            continue
-        if role == "user" and i == len(messages) - 1 and images:
-            parts: list[dict[str, Any]] = [
-                {
-                    "type": "text",
-                    "text": user_text_for_vision_turn(content),
-                }
-            ]
-            for img in images[:4]:
-                url = img.strip()
-                if not url.startswith("data:"):
-                    url = f"data:image/jpeg;base64,{url}"
-                parts.append({"type": "image_url", "image_url": {"url": url}})
-            openai_messages.append({"role": "user", "content": parts})
-        else:
-            openai_messages.append({"role": role, "content": content})
+        client = OpenAI(api_key=api_key, timeout=120.0, max_retries=2)
+        openai_messages: list[dict[str, Any]] = [{"role": "system", "content": sys_p}]
+        vidx = vision_user_index
+        if vidx is None and images:
+            if messages and messages[-1].get("role") == "user":
+                vidx = len(messages) - 1
+        for i, m in enumerate(messages):
+            role = m.get("role")
+            content = m.get("content") or ""
+            if role not in ("user", "assistant"):
+                continue
+            if role == "user" and i == vidx and images:
+                parts: list[dict[str, Any]] = [
+                    {"type": "text", "text": user_text_for_vision_turn(content)},
+                ]
+                for img in images[:4]:
+                    url = img.strip()
+                    if not url.startswith("data:"):
+                        url = f"data:image/jpeg;base64,{url}"
+                    parts.append({"type": "image_url", "image_url": {"url": url}})
+                openai_messages.append({"role": "user", "content": parts})
+            else:
+                openai_messages.append({"role": role, "content": content})
 
-    resp = client.chat.completions.create(
-        model=model,
-        messages=openai_messages,
-        response_format={"type": "json_object"},
-        temperature=0.4,
-    )
-    raw = resp.choices[0].message.content or "{}"
-    return assistant_reply_from_model_raw(raw)
-
-
-def gemini_assistant_reply(
-    messages: list[dict[str, str]],
-    images: list[str] | None,
-    *,
-    api_key: str,
-    model_name: str,
-) -> dict[str, Any]:
-    from google import genai
-    from google.genai import types
-
-    client = genai.Client(api_key=api_key)
-    try:
-        contents: list[types.Content] = []
-        for m in messages[:-1]:
-            role, content = m.get("role"), m.get("content") or ""
-            if role == "user":
-                contents.append(
-                    types.Content(role="user", parts=[types.Part.from_text(text=content)])
-                )
-            elif role == "assistant":
-                contents.append(
-                    types.Content(role="model", parts=[types.Part.from_text(text=content)])
-                )
-
-        last = messages[-1]
-        last_parts: list[types.Part] = []
-        if last.get("role") == "user" and images:
-            last_parts.append(
-                types.Part.from_text(
-                    text=last.get("content") or "Identify this hardware for company inventory."
-                )
-            )
-            for img in images[:4]:
-                mime, raw = data_url_to_mime_and_bytes(img.strip())
-                last_parts.append(types.Part.from_bytes(data=raw, mime_type=mime))
-        else:
-            last_parts.append(
-                types.Part.from_text(text=(last.get("content") or "").strip() or ".")
-            )
-        contents.append(types.Content(role="user", parts=last_parts))
-
-        response = client.models.generate_content(
-            model=model_name,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=effective_system_prompt(),
-                temperature=0.4,
-                response_mime_type="application/json",
-            ),
+        resp = client.chat.completions.create(
+            model=model,
+            messages=openai_messages,
+            response_format={"type": "json_object"},
+            temperature=0.4,
         )
+        return (resp.choices[0].message.content or "").strip() or "{}"
+
+    if prov == "gemini":
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=api_key)
         try:
-            raw = (response.text or "").strip() or "{}"
-        except (ValueError, AttributeError):
-            raw = "{}"
-        return assistant_reply_from_model_raw(raw)
-    finally:
-        client.close()
+            contents: list[types.Content] = []
+            vidx = vision_user_index
+            if vidx is None and images:
+                if messages and messages[-1].get("role") == "user":
+                    vidx = len(messages) - 1
+            for i, m in enumerate(messages):
+                role, content = m.get("role"), m.get("content") or ""
+                if role == "user":
+                    if images is not None and vidx is not None and i == vidx:
+                        t = user_text_for_vision_turn(content) if content.strip() else (
+                            "Identify this hardware for company inventory."
+                        )
+                        last_parts: list[types.Part] = [types.Part.from_text(text=t)]
+                        for img in images[:4]:
+                            mime, raw = data_url_to_mime_and_bytes(img.strip())
+                            last_parts.append(types.Part.from_bytes(data=raw, mime_type=mime))
+                        contents.append(types.Content(role="user", parts=last_parts))
+                    else:
+                        contents.append(
+                            types.Content(
+                                role="user",
+                                parts=[types.Part.from_text(text=(content or "").strip() or ".")],
+                            )
+                        )
+                elif role == "assistant":
+                    contents.append(
+                        types.Content(role="model", parts=[types.Part.from_text(text=content)])
+                    )
 
-
-def ollama_assistant_reply(
-    messages: list[dict[str, str]],
-    images: list[str] | None,
-    *,
-    base_url: str,
-    model: str,
-    ollama_image_mode: str = "auto",
-) -> dict[str, Any]:
-    base = (base_url or "").strip().rstrip("/")
-    if not base:
-        raise ValueError("empty Ollama base URL")
-    model_name = (model or "").strip()
-    if not model_name:
-        raise ValueError("empty Ollama model name")
-
-    vision = resolve_ollama_images_enabled(model_name, ollama_image_mode)
-    if images and not vision:
-        return {"message": OLLAMA_TEXT_ONLY_WITH_IMAGES_MSG.format(model=model_name), "proposal": None}
-
-    sys_prompt = effective_system_prompt() + (OLLAMA_VISION_APPENDIX if (vision and images) else "")
-
-    ollama_messages: list[dict[str, Any]] = [{"role": "system", "content": sys_prompt}]
-    for i, m in enumerate(messages):
-        role = m.get("role")
-        content = m.get("content") or ""
-        if role not in ("user", "assistant"):
-            continue
-        if role == "user" and i == len(messages) - 1 and images and vision:
-            ollama_messages.append(
-                {
-                    "role": "user",
-                    "content": user_text_for_vision_turn(content),
-                    "images": [data_url_to_ollama_b64(img) for img in images[:4]],
-                }
+            response = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=sys_p,
+                    temperature=0.4,
+                    response_mime_type="application/json",
+                ),
             )
-        else:
-            ollama_messages.append({"role": role, "content": content})
+            try:
+                return ((response.text or "").strip() or "{}")
+            except (ValueError, AttributeError):
+                return "{}"
+        finally:
+            client.close()
 
-    payload: dict[str, Any] = {
-        "model": model_name,
-        "messages": ollama_messages,
-        "stream": False,
-        "format": "json",
-        "options": {"temperature": 0.25 if (vision and images) else 0.4},
-    }
-    out = http_post_json(f"{base}/api/chat", payload, timeout_s=120.0)
-    msg = out.get("message") or {}
-    raw = (msg.get("content") or "").strip() or "{}"
-    return assistant_reply_from_model_raw(raw)
+    if prov == "ollama":
+        base = (ollama_base_url or "").strip().rstrip("/")
+        if not base:
+            raise ValueError("empty Ollama base URL")
+        model_name = (model or "").strip()
+        if not model_name:
+            raise ValueError("empty Ollama model name")
+
+        vision = resolve_ollama_images_enabled(model_name, ollama_image_mode)
+        if images and not vision:
+            raise RuntimeError("ollama_text_only_with_images")
+
+        vidx = vision_user_index
+        if vidx is None and images:
+            if messages and messages[-1].get("role") == "user":
+                vidx = len(messages) - 1
+
+        sys_ollama = sys_p + (OLLAMA_VISION_APPENDIX if (vision and images) else "")
+        ollama_messages: list[dict[str, Any]] = [{"role": "system", "content": sys_ollama}]
+        for i, m in enumerate(messages):
+            role = m.get("role")
+            content = m.get("content") or ""
+            if role not in ("user", "assistant"):
+                continue
+            if role == "user" and i == vidx and images and vision:
+                ollama_messages.append(
+                    {
+                        "role": "user",
+                        "content": user_text_for_vision_turn(content),
+                        "images": [data_url_to_ollama_b64(img) for img in images[:4]],
+                    }
+                )
+            else:
+                ollama_messages.append({"role": role, "content": content})
+
+        payload: dict[str, Any] = {
+            "model": model_name,
+            "messages": ollama_messages,
+            "stream": False,
+            "format": "json",
+            "options": {"temperature": 0.25 if (vision and images) else 0.4},
+        }
+        out = http_post_json(f"{base}/api/chat", payload, timeout_s=120.0)
+        msg = out.get("message") or {}
+        return (msg.get("content") or "").strip() or "{}"
+
+    raise ValueError(f"unsupported provider for completion: {prov}")
 
 
 def run_assistant(
@@ -216,12 +214,22 @@ def run_assistant(
         return assistant_service_unavailable()
 
     if prov == "ollama":
+        vision = resolve_ollama_images_enabled((model or "").strip(), ollama_image_mode)
+        if images and not vision:
+            return {
+                "message": OLLAMA_TEXT_ONLY_WITH_IMAGES_MSG.format(model=model),
+                "proposal": None,
+            }
         try:
-            return ollama_assistant_reply(
+            from app.assistant.tool_loop import run_assistant_with_tools
+
+            return run_assistant_with_tools(
                 messages,
                 images,
-                base_url=ollama_base_url,
+                provider=prov,
+                api_key=api_key,
                 model=model,
+                ollama_base_url=ollama_base_url,
                 ollama_image_mode=ollama_image_mode,
             )
         except urllib.error.URLError as e:
@@ -244,15 +252,23 @@ def run_assistant(
             )
             return assistant_service_unavailable()
         try:
-            return openai_assistant_reply(messages, images, api_key=api_key, model=model)
+            from app.assistant.tool_loop import run_assistant_with_tools
+
+            return run_assistant_with_tools(
+                messages,
+                images,
+                provider=prov,
+                api_key=api_key,
+                model=model,
+                ollama_base_url=ollama_base_url,
+                ollama_image_mode=ollama_image_mode,
+            )
         except Exception:
             log_exception("OpenAI assistant request failed")
             return assistant_service_unavailable()
 
     if prov == "gemini":
-        try:
-            import google.genai
-        except ImportError:
+        if importlib.util.find_spec("google.genai") is None:
             log_error(
                 "assistant: google-genai is not installed for this interpreter: "
                 f"{sys.executable} (use project venv: backend\\.venv\\Scripts\\python.exe "
@@ -262,7 +278,17 @@ def run_assistant(
         from google.genai import errors as genai_errors
 
         try:
-            return gemini_assistant_reply(messages, images, api_key=api_key, model_name=model)
+            from app.assistant.tool_loop import run_assistant_with_tools
+
+            return run_assistant_with_tools(
+                messages,
+                images,
+                provider=prov,
+                api_key=api_key,
+                model=model,
+                ollama_base_url=ollama_base_url,
+                ollama_image_mode=ollama_image_mode,
+            )
         except genai_errors.APIError as e:
             code = getattr(e, "code", None)
             brief = (str(e) or "")[:900]

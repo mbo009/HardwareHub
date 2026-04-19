@@ -2,6 +2,9 @@ import os
 import sys
 from pathlib import Path
 
+# Before any `import app` (Config reads DATABASE_URL at import time).
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+
 import pytest
 from werkzeug.security import generate_password_hash
 
@@ -22,6 +25,7 @@ def app():
     app.config.update(TESTING=True)
 
     with app.app_context():
+        db.drop_all()
         db.create_all()
         admin = User(
             email="admin@test.com",
