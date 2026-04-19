@@ -1,10 +1,11 @@
 from datetime import date
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 from sqlalchemy import case
 
 from app.auth.decorators import login_required
-from app.models import Hardware
+from app.db import db
+from app.models import Hardware, User
 
 hardware_bp = Blueprint("hardware", __name__, url_prefix="/api/hardware")
 
@@ -42,6 +43,16 @@ def list_hardware():
     limit_raw = request.args.get("limit", "").strip()
 
     query = Hardware.query
+
+    assigned_to_param = (request.args.get("assignedTo") or "").strip().lower()
+    if assigned_to_param:
+        user_id = session.get("user_id")
+        actor = db.session.get(User, user_id) if user_id else None
+        if not actor:
+            return jsonify({"error": "unauthorized"}), 401
+        if assigned_to_param != actor.email.strip().lower():
+            return jsonify({"error": "forbidden_assigned_to"}), 403
+        query = query.filter(Hardware.assigned_to_email == assigned_to_param)
 
     if status:
         query = query.filter(Hardware.status == status)

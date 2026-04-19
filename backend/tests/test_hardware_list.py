@@ -135,3 +135,34 @@ def test_hardware_list_sort_desc_by_purchase_date(client, app):
     data = res.get_json()
     names = [item["name"] for item in data["items"]]
     assert names == ["iPad Air", "Dell XPS 15", "MacBook Pro 16"]
+
+
+def test_hardware_list_assigned_to_self_ok(client, app):
+    from app.db import db
+    from app.models import Hardware
+
+    with app.app_context():
+        row = Hardware(
+            name="My Laptop",
+            brand="Apple",
+            purchase_date=date(2026, 1, 10),
+            status="In Use",
+            assigned_to_email="user@test.com",
+        )
+        db.session.add(row)
+        db.session.commit()
+
+    login_user(client)
+    res = client.get("/api/hardware?assignedTo=user@test.com&status=In%20Use")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["total"] == 1
+    assert data["items"][0]["name"] == "My Laptop"
+
+
+def test_hardware_list_assigned_to_other_forbidden(client, app):
+    seed_hardware(app)
+    login_user(client)
+    res = client.get("/api/hardware?assignedTo=admin@test.com")
+    assert res.status_code == 403
+    assert res.get_json()["error"] == "forbidden_assigned_to"
