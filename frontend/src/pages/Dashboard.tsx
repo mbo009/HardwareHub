@@ -10,6 +10,7 @@ import AdminFilters from "../components/admin/AdminFilters";
 import AppShell from "../components/AppShell";
 import { apiFetch, type ApiError } from "../api/client";
 import { useMe } from "../auth/useMe";
+import { HARDWARE_INVENTORY_CHANGED_EVENT } from "../hardware/inventoryEvents";
 import { buildHardwareListSearchParams } from "../hardware/hardwareListQuery";
 
 type HardwareItem = {
@@ -67,37 +68,43 @@ export default function DashboardPage() {
     return () => window.clearTimeout(t);
   }, [brandFilter]);
 
-  const loadList = React.useCallback(() => {
-    const params = buildHardwareListSearchParams({
-      statusFilter,
-      brandFilter: debouncedBrandFilter,
-      dateFrom: dateFromFilter,
-      dateTo: dateToFilter,
-      sortBy: "name",
-      sortOrder: "asc",
-      page,
-      limit: PAGE_SIZE,
-    });
-    return apiFetch<HardwareListResponse>(`/api/hardware?${params.toString()}`)
-      .then((data) => {
-        const tp = Math.max(1, data.totalPages);
-        setTotalPages(tp);
-        setRows(data.items);
-        setError(null);
-        if (page > tp) {
-          setPage(tp);
-        }
-      })
-      .catch(() => {
-        setError("Could not load hardware list.");
+  const loadList = React.useCallback(
+    (forcedPage?: number) => {
+      const effectivePage = forcedPage !== undefined ? forcedPage : page;
+      const params = buildHardwareListSearchParams({
+        statusFilter,
+        brandFilter: debouncedBrandFilter,
+        dateFrom: dateFromFilter,
+        dateTo: dateToFilter,
+        sortBy: "name",
+        sortOrder: "asc",
+        page: effectivePage,
+        limit: PAGE_SIZE,
       });
-  }, [
-    page,
-    statusFilter,
-    debouncedBrandFilter,
-    dateFromFilter,
-    dateToFilter,
-  ]);
+      return apiFetch<HardwareListResponse>(`/api/hardware?${params.toString()}`)
+        .then((data) => {
+          const tp = Math.max(1, data.totalPages);
+          setTotalPages(tp);
+          setRows(data.items);
+          setError(null);
+          if (forcedPage !== undefined) {
+            setPage(Math.min(forcedPage, tp));
+          } else if (page > tp) {
+            setPage(tp);
+          }
+        })
+        .catch(() => {
+          setError("Could not load hardware list.");
+        });
+    },
+    [
+      page,
+      statusFilter,
+      debouncedBrandFilter,
+      dateFromFilter,
+      dateToFilter,
+    ],
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -108,6 +115,15 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
+  }, [loadList]);
+
+  React.useEffect(() => {
+    const onInventoryChanged = () => {
+      void loadList(1);
+    };
+    window.addEventListener(HARDWARE_INVENTORY_CHANGED_EVENT, onInventoryChanged);
+    return () =>
+      window.removeEventListener(HARDWARE_INVENTORY_CHANGED_EVENT, onInventoryChanged);
   }, [loadList]);
 
   const myEmail =

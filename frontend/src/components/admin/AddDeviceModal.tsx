@@ -26,7 +26,6 @@ type Props = {
   setNotes: (value: string) => void;
   category: string | null;
   setCategory: (value: string | null) => void;
-  /** YYYY-MM-DD from the date picker; empty means on site today */
   onSiteDate: string;
   setOnSiteDate: (value: string) => void;
   touched: boolean;

@@ -20,6 +20,7 @@ import type {
   HardwareUpdateResponse,
   Row,
 } from "../components/admin/types";
+import { HARDWARE_INVENTORY_CHANGED_EVENT } from "../hardware/inventoryEvents";
 import { buildHardwareListSearchParams } from "../hardware/hardwareListQuery";
 
 export default function AdminPanelPage() {
@@ -122,47 +123,64 @@ export default function AdminPanelPage() {
     };
   }, [brandFilter]);
 
-  const loadRows = useCallback(() => {
-    setIsLoadingRows(true);
-    setLoadRowsError(null);
-    const params = buildHardwareListSearchParams({
-      statusFilter,
-      brandFilter: debouncedBrandFilter,
-      dateFrom: dateFromFilter,
-      dateTo: dateToFilter,
-      sortBy,
-      sortOrder,
-      page,
-      limit: 8,
-    });
-    const path = `/api/hardware?${params.toString()}`;
-
-    apiFetch<HardwareListResponse>(path)
-      .then((response) => {
-        const mapped: Row[] = response.items.map((item) => ({
-          id: item.id,
-          name: item.name,
-          brand: item.brand,
-          serial: item.serialNumber || "",
-          date: item.purchaseDate || "-",
-          preArrival: Boolean(item.preArrival),
-          status: toUiStatus(item.status),
-          assignedTo: item.assignedTo,
-          notes: item.notes,
-        }));
-        setRows(mapped);
-        setTotalPages(response.totalPages || 1);
-      })
-      .catch(() => {
-        setLoadRowsError("Could not load hardware list.");
-      })
-      .finally(() => {
-        setIsLoadingRows(false);
+  const loadRows = useCallback(
+    (forcedPage?: number) => {
+      setIsLoadingRows(true);
+      setLoadRowsError(null);
+      const effectivePage = forcedPage !== undefined ? forcedPage : page;
+      const params = buildHardwareListSearchParams({
+        statusFilter,
+        brandFilter: debouncedBrandFilter,
+        dateFrom: dateFromFilter,
+        dateTo: dateToFilter,
+        sortBy,
+        sortOrder,
+        page: effectivePage,
+        limit: 8,
       });
-  }, [dateFromFilter, dateToFilter, debouncedBrandFilter, page, sortBy, sortOrder, statusFilter]);
+      const path = `/api/hardware?${params.toString()}`;
+
+      apiFetch<HardwareListResponse>(path)
+        .then((response) => {
+          const mapped: Row[] = response.items.map((item) => ({
+            id: item.id,
+            name: item.name,
+            brand: item.brand,
+            serial: item.serialNumber || "",
+            date: item.purchaseDate || "-",
+            preArrival: Boolean(item.preArrival),
+            status: toUiStatus(item.status),
+            assignedTo: item.assignedTo,
+            notes: item.notes,
+          }));
+          setRows(mapped);
+          const tp = Math.max(1, response.totalPages || 1);
+          setTotalPages(tp);
+          if (forcedPage !== undefined) {
+            setPage(Math.min(forcedPage, tp));
+          }
+        })
+        .catch(() => {
+          setLoadRowsError("Could not load hardware list.");
+        })
+        .finally(() => {
+          setIsLoadingRows(false);
+        });
+    },
+    [dateFromFilter, dateToFilter, debouncedBrandFilter, page, sortBy, sortOrder, statusFilter],
+  );
 
   useEffect(() => {
     loadRows();
+  }, [loadRows]);
+
+  useEffect(() => {
+    const onInventoryChanged = () => {
+      void loadRows(1);
+    };
+    window.addEventListener(HARDWARE_INVENTORY_CHANGED_EVENT, onInventoryChanged);
+    return () =>
+      window.removeEventListener(HARDWARE_INVENTORY_CHANGED_EVENT, onInventoryChanged);
   }, [loadRows]);
 
   const addDevice = async () => {

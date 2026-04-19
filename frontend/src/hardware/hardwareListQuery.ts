@@ -15,7 +15,6 @@ export type HardwareListQueryOpts = {
   sortOrder: "asc" | "desc";
   page: number;
   limit: number;
-  /** When set, restricts list to this assignee (must match session user for user routes). */
   assignedToEmail?: string;
 };
 

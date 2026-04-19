@@ -99,6 +99,7 @@ export default function App() {
         </Routes>
         <FloatingAssistantChat
           email={meState.status === "authed" ? meState.me.email : null}
+          role={meState.status === "authed" ? meState.me.role : null}
         />
         <ForcePasswordChangeModal
           open={
