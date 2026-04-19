@@ -9,8 +9,10 @@ import AdminDevicesTable from "../components/admin/AdminDevicesTable";
 import AdminFilters from "../components/admin/AdminFilters";
 import ConfirmDeleteModal from "../components/admin/ConfirmDeleteModal";
 import ConfirmReturnModal from "../components/admin/ConfirmReturnModal";
+import CreateUserModal from "../components/admin/CreateUserModal";
 import EditDeviceModal from "../components/admin/EditDeviceModal";
 import type {
+  AdminUserCreateResponse,
   HardwareCreateResponse,
   HardwareListItem,
   HardwareListResponse,
@@ -57,6 +59,13 @@ export default function AdminPanelPage() {
   const [editStatus, setEditStatus] = useState<Row["status"]>("Available");
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [openCreateUser, setOpenCreateUser] = useState(false);
+  const [createUserEmail, setCreateUserEmail] = useState("");
+  const [createUserSubmitting, setCreateUserSubmitting] = useState(false);
+  const [createUserError, setCreateUserError] = useState<string | null>(null);
+  const [generatedTempPassword, setGeneratedTempPassword] = useState<
+    string | null
+  >(null);
 
   const existingSerials = useMemo(
     () => new Set(rows.map((row) => row.serial.toLowerCase())),
@@ -318,6 +327,69 @@ export default function AdminPanelPage() {
     setEditError(null);
   };
 
+  const closeCreateUserModal = () => {
+    if (createUserSubmitting) {
+      return;
+    }
+    setOpenCreateUser(false);
+    setCreateUserEmail("");
+    setCreateUserError(null);
+    setGeneratedTempPassword(null);
+  };
+
+  const createUser = async () => {
+    const email = createUserEmail.trim().toLowerCase();
+    if (!email) {
+      setCreateUserError("Email is required.");
+      return;
+    }
+    if (!email.endsWith("@booksy.com")) {
+      setCreateUserError("Email must use @booksy.com domain.");
+      return;
+    }
+
+    setCreateUserSubmitting(true);
+    setCreateUserError(null);
+    try {
+      const response = await apiFetch<AdminUserCreateResponse>("/api/admin/users", {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          role: "user",
+        }),
+      });
+      setGeneratedTempPassword(response.temporaryPassword);
+    } catch (error) {
+      const err = error as ApiError;
+      const errorCode =
+        err?.data && typeof err.data === "object" && "error" in err.data
+          ? String((err.data as { error?: string }).error || "")
+          : "";
+
+      if (err?.status === 409 && errorCode === "email_already_exists") {
+        setCreateUserError("User with this email already exists.");
+      } else if (err?.status === 400 && errorCode === "invalid_email") {
+        setCreateUserError("Enter a valid email address.");
+      } else if (err?.status === 400 && errorCode === "invalid_email_domain") {
+        setCreateUserError("Email must use @booksy.com domain.");
+      } else if (err?.status === 400 && errorCode === "invalid_role") {
+        setCreateUserError("Invalid role.");
+      } else if (err?.status === 400 && errorCode === "invalid_password") {
+        setCreateUserError(
+          "Server expected a password. Restart the backend so user creation uses temporary passwords.",
+        );
+      } else if (err?.status === 401) {
+        setCreateUserError("Session expired. Please log in again.");
+      } else if (err?.status === 403) {
+        setCreateUserError("Only admins can create users.");
+      } else {
+        setCreateUserError("Could not create user. Try again.");
+      }
+    } finally {
+      setCreateUserSubmitting(false);
+    }
+  };
+
   const openEditModal = (row: Row) => {
     setEditError(null);
     setPendingEditRow(row);
@@ -405,7 +477,30 @@ export default function AdminPanelPage() {
 
   return (
     <AppShell title="Hardware Management">
-      <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 0.7, width: "100%", maxWidth: 790 }}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 0.8,
+          mb: 0.7,
+          width: "100%",
+          maxWidth: 790,
+        }}
+      >
+        <Button
+          size="sm"
+          variant="outlined"
+          color="neutral"
+          onClick={() => setOpenCreateUser(true)}
+          sx={{
+            minHeight: 24,
+            fontSize: 9.6,
+            px: 1.2,
+            borderRadius: "sm",
+          }}
+        >
+          Create User
+        </Button>
         <Button
           size="sm"
           onClick={() => setOpen(true)}
@@ -472,6 +567,19 @@ export default function AdminPanelPage() {
           void removeDevice(pendingDeleteRow).finally(() => {
             setPendingDeleteRow(null);
           });
+        }}
+      />
+
+      <CreateUserModal
+        open={openCreateUser}
+        email={createUserEmail}
+        setEmail={setCreateUserEmail}
+        isSubmitting={createUserSubmitting}
+        submitError={createUserError}
+        generatedPassword={generatedTempPassword}
+        onClose={closeCreateUserModal}
+        onSubmit={() => {
+          void createUser();
         }}
       />
 

@@ -5,11 +5,17 @@ import LoginPage from "./pages/Login";
 import DashboardPage from "./pages/Dashboard";
 import MyRentalsPage from "./pages/MyRentals";
 import AdminPanelPage from "./pages/AdminPanel";
-import { useMe } from "./auth/useMe";
+import { useMe, type Me } from "./auth/useMe";
+import ForcePasswordChangeModal from "./components/auth/ForcePasswordChangeModal";
+import { apiFetch, type ApiError } from "./api/client";
 
 export default function App() {
   const { state: meState, setAuthed } = useMe();
   const location = useLocation();
+  const [isChangingPassword, setIsChangingPassword] = React.useState(false);
+  const [changePasswordError, setChangePasswordError] = React.useState<
+    string | null
+  >(null);
   const isAppTabRoute =
     location.pathname === "/dashboard" ||
     location.pathname === "/my-rentals" ||
@@ -90,6 +96,44 @@ export default function App() {
             }
           />
         </Routes>
+        <ForcePasswordChangeModal
+          open={
+            meState.status === "authed" &&
+            meState.me.mustChangePassword &&
+            location.pathname !== "/login"
+          }
+          isSubmitting={isChangingPassword}
+          error={changePasswordError}
+          onSubmit={(newPassword) => {
+            setIsChangingPassword(true);
+            setChangePasswordError(null);
+            apiFetch<Me>("/api/auth/change-password", {
+              method: "POST",
+              body: JSON.stringify({ newPassword }),
+            })
+              .then((me) => {
+                setAuthed(me);
+              })
+              .catch((error) => {
+                const err = error as ApiError;
+                const data = err?.data as
+                  | { error?: string; details?: string[] }
+                  | undefined;
+                if (data?.error === "invalid_password") {
+                  setChangePasswordError(
+                    "Password must include uppercase, digit and special character.",
+                  );
+                } else if (err?.status === 401) {
+                  setChangePasswordError("Session expired. Please log in again.");
+                } else {
+                  setChangePasswordError("Could not change password. Try again.");
+                }
+              })
+              .finally(() => {
+                setIsChangingPassword(false);
+              });
+          }}
+        />
       </motion.div>
     </AnimatePresence>
   );

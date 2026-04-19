@@ -4,6 +4,7 @@ import { apiFetch } from "../api/client";
 export type Me = {
   email: string;
   role: "admin" | "user";
+  mustChangePassword: boolean;
 };
 
 type State =

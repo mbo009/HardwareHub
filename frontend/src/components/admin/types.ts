@@ -50,6 +50,14 @@ export type HardwareUpdateResponse = {
   notes: string | null;
 };
 
+export type AdminUserCreateResponse = {
+  id: number;
+  email: string;
+  role: "admin" | "user";
+  temporaryPassword: string;
+  mustChangePassword: boolean;
+};
+
 export type HardwareListResponse = {
   items: HardwareListItem[];
   page: number;
