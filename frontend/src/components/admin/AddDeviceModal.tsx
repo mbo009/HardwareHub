@@ -26,6 +26,9 @@ type Props = {
   setNotes: (value: string) => void;
   category: string | null;
   setCategory: (value: string | null) => void;
+  /** YYYY-MM-DD from the date picker; empty means on site today */
+  onSiteDate: string;
+  setOnSiteDate: (value: string) => void;
   touched: boolean;
   serialTaken: boolean;
   isSubmitting: boolean;
@@ -47,6 +50,8 @@ export default function AddDeviceModal(props: Props) {
     setNotes,
     category,
     setCategory,
+    onSiteDate,
+    setOnSiteDate,
     touched,
     serialTaken,
     isSubmitting,
@@ -139,6 +144,23 @@ export default function AddDeviceModal(props: Props) {
               <Option value="Monitor">Monitor</Option>
               <Option value="Other">Other</Option>
             </Select>
+          </FormControl>
+
+          <FormControl>
+            <FormLabel sx={{ color: "#111827", fontSize: 14, fontWeight: 600 }}>
+              On-site date (optional)
+            </FormLabel>
+            <Input
+              type="date"
+              value={onSiteDate}
+              onChange={(event) => setOnSiteDate(event.target.value)}
+              sx={{ fontSize: 12, minHeight: 40, borderRadius: 12 }}
+            />
+            <Typography level="body-xs" sx={{ color: "#6b7280", mt: 0.35 }}>
+              Leave empty if the device is already available. Pick a future date
+              when it is ordered and not yet delivered (shows as Ordered until
+              that day).
+            </Typography>
           </FormControl>
 
           <FormControl>

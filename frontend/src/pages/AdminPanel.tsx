@@ -40,6 +40,7 @@ export default function AdminPanelPage() {
   const [brand, setBrand] = useState("");
   const [notes, setNotes] = useState("");
   const [category, setCategory] = useState<string | null>(null);
+  const [onSiteDate, setOnSiteDate] = useState("");
   const [touched, setTouched] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -93,6 +94,7 @@ export default function AdminPanelPage() {
     setBrand("");
     setNotes("");
     setCategory(null);
+    setOnSiteDate("");
     setTouched(false);
     setSubmitError(null);
   };
@@ -126,8 +128,10 @@ export default function AdminPanelPage() {
     if (statusFilter) {
       const statusMap: Record<string, string> = {
         Available: "Available",
+        Ordered: "Ordered",
         Rented: "In Use",
         "In Repair": "Repair",
+        Unknown: "Unknown",
       };
       params.set("status", statusMap[statusFilter] || statusFilter);
     }
@@ -156,6 +160,7 @@ export default function AdminPanelPage() {
           brand: item.brand,
           serial: item.serialNumber || "",
           date: item.purchaseDate || "-",
+          preArrival: Boolean(item.preArrival),
           status: toUiStatus(item.status),
           assignedTo: item.assignedTo,
           notes: item.notes,
@@ -184,6 +189,10 @@ export default function AdminPanelPage() {
 
     setIsSubmitting(true);
     try {
+      const purchaseDate =
+        onSiteDate.trim() !== ""
+          ? onSiteDate.trim()
+          : new Date().toISOString().slice(0, 10);
       const created = await apiFetch<HardwareCreateResponse>("/api/admin/hardware", {
         method: "POST",
         body: JSON.stringify({
@@ -191,7 +200,7 @@ export default function AdminPanelPage() {
           brand: trimmedBrand,
           serialNumber: trimmedSerial || null,
           status: "Available",
-          purchaseDate: new Date().toISOString().slice(0, 10),
+          purchaseDate,
           notes: trimmedNotes || null,
           history: `Category: ${category || "Other"}`,
         }),
@@ -204,6 +213,7 @@ export default function AdminPanelPage() {
           brand: created.brand,
           serial: created.serialNumber || "",
           date: created.purchaseDate || new Date().toISOString().slice(0, 10),
+          preArrival: Boolean(created.preArrival),
           status: toUiStatus(created.status),
           notes: created.notes,
           category: category || "Other",
@@ -218,6 +228,16 @@ export default function AdminPanelPage() {
         setSubmitError("Session expired. Please log in again.");
       } else if (err?.status === 403) {
         setSubmitError("Only admins can add devices.");
+      } else if (err?.status === 400) {
+        const code =
+          err?.data && typeof err.data === "object" && err.data !== null
+            ? (err.data as { error?: string }).error
+            : undefined;
+        if (code === "invalid_purchase_date") {
+          setSubmitError("Invalid on-site date. Use YYYY-MM-DD.");
+        } else {
+          setSubmitError("Could not add device. Check the form and try again.");
+        }
       } else {
         setSubmitError("Could not add device. Try again.");
       }
@@ -555,6 +575,8 @@ export default function AdminPanelPage() {
         setNotes={setNotes}
         category={category}
         setCategory={setCategory}
+        onSiteDate={onSiteDate}
+        setOnSiteDate={setOnSiteDate}
         touched={touched}
         serialTaken={serialTaken}
         isSubmitting={isSubmitting}

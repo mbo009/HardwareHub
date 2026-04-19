@@ -17,6 +17,7 @@ type HardwareItem = {
   purchaseDate: string | null;
   status: "Available" | "In Use" | "Repair" | "Unknown";
   assignedTo: string | null;
+  preArrival?: boolean;
 };
 
 type HardwareListResponse = {
@@ -31,6 +32,12 @@ function toUiStatus(status: HardwareItem["status"]) {
   if (status === "In Use") return "Rented";
   if (status === "Repair") return "In Repair";
   return status;
+}
+
+function isOrderedState(row: HardwareItem) {
+  return Boolean(
+    row.preArrival && (row.status === "Available" || row.status === "Unknown"),
+  );
 }
 
 const PAGE_SIZE = 20;
@@ -99,6 +106,8 @@ export default function DashboardPage() {
           setActionError("This device cannot be returned.");
         } else if (code === "forbidden_return") {
           setActionError("You can only return your own rentals.");
+        } else if (code === "not_yet_available") {
+          setActionError("This device is not on site yet (ordered).");
         } else {
           setActionError("Action failed. Try again.");
         }
@@ -156,8 +165,9 @@ export default function DashboardPage() {
               </tr>
             ) : (
               rows.map((row) => {
-                const uiStatus = toUiStatus(row.status);
-                const canRent = row.status === "Available";
+                const ordered = isOrderedState(row);
+                const chipLabel = ordered ? "Ordered" : toUiStatus(row.status);
+                const canRent = row.status === "Available" && !row.preArrival;
                 const assigned = (row.assignedTo || "").trim().toLowerCase();
                 const canReturn =
                   row.status === "In Use" && myEmail.length > 0 && assigned === myEmail;
@@ -171,14 +181,18 @@ export default function DashboardPage() {
                       <Chip
                         size="sm"
                         sx={{
-                          bgcolor: uiStatus === "In Repair" ? "#e11d48" : "#0b1220",
+                          bgcolor: ordered
+                            ? "#7c3aed"
+                            : chipLabel === "In Repair"
+                            ? "#e11d48"
+                            : "#0b1220",
                           color: "white",
                           borderRadius: 999,
                           minHeight: 16,
                           fontSize: 8.5,
                         }}
                       >
-                        {uiStatus}
+                        {chipLabel}
                       </Chip>
                     </td>
                     <td>

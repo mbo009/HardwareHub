@@ -50,8 +50,10 @@ export default function AdminFilters(props: Props) {
           >
             <Option value="">All</Option>
             <Option value="Available">Available</Option>
+            <Option value="Ordered">Ordered</Option>
             <Option value="Rented">Rented</Option>
             <Option value="In Repair">In Repair</Option>
+            <Option value="Unknown">Unknown</Option>
           </Select>
         </FormControl>
         <FormControl size="sm" sx={{ minWidth: 150 }}>

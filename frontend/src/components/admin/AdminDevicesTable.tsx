@@ -125,7 +125,19 @@ export default function AdminDevicesTable(props: Props) {
               <td colSpan={6}>No devices found.</td>
             </tr>
           ) : (
-            rows.map((row) => (
+            rows.map((row) => {
+              const showOrdered =
+                Boolean(row.preArrival) &&
+                (row.status === "Available" || row.status === "Unknown");
+              const chipLabel = showOrdered ? "Ordered" : row.status;
+              const chipBg = showOrdered
+                ? "#7c3aed"
+                : row.status === "In Repair"
+                  ? "#e11d48"
+                  : row.status === "Unknown"
+                    ? "#6b7280"
+                    : "#0b1220";
+              return (
               <React.Fragment key={row.id ?? `${row.name}-${row.serial}-${row.date}`}>
                 <tr
                   onClick={() => {
@@ -145,19 +157,14 @@ export default function AdminDevicesTable(props: Props) {
                     <Chip
                       size="sm"
                       sx={{
-                        bgcolor:
-                          row.status === "In Repair"
-                            ? "#e11d48"
-                            : row.status === "Unknown"
-                              ? "#6b7280"
-                              : "#0b1220",
+                        bgcolor: chipBg,
                         color: "white",
                         borderRadius: 999,
                         minHeight: 16,
                         fontSize: 8.5,
                       }}
                     >
-                      {row.status}
+                      {chipLabel}
                     </Chip>
                   </td>
                   <td>
@@ -240,7 +247,8 @@ export default function AdminDevicesTable(props: Props) {
                   </tr>
                 ) : null}
               </React.Fragment>
-            ))
+              );
+            })
           )}
         </tbody>
       </Table>

@@ -5,6 +5,7 @@ export type Row = {
   serial: string;
   date: string;
   status: "Available" | "Rented" | "In Repair" | "Unknown";
+  preArrival?: boolean;
   notes?: string | null;
   assignedTo?: string | null;
   category?: string;
@@ -18,6 +19,7 @@ export type HardwareCreateResponse = {
   purchaseDate: string | null;
   status: "Available" | "In Use" | "Repair" | "Unknown";
   notes: string | null;
+  preArrival?: boolean;
 };
 
 export type HardwareRepairResponse = {
@@ -37,6 +39,7 @@ export type HardwareListItem = {
   status: "Available" | "In Use" | "Repair" | "Unknown";
   assignedTo: string | null;
   notes: string | null;
+  preArrival?: boolean;
 };
 
 export type HardwareUpdateResponse = {
@@ -48,6 +51,7 @@ export type HardwareUpdateResponse = {
   status: "Available" | "In Use" | "Repair" | "Unknown";
   assignedTo: string | null;
   notes: string | null;
+  preArrival?: boolean;
 };
 
 export type AdminUserCreateResponse = {
