@@ -7,6 +7,7 @@ import MyRentalsPage from "./pages/MyRentals";
 import AdminPanelPage from "./pages/AdminPanel";
 import { useMe, type Me } from "./auth/useMe";
 import ForcePasswordChangeModal from "./components/auth/ForcePasswordChangeModal";
+import FloatingAssistantChat from "./components/FloatingAssistantChat";
 import { apiFetch, type ApiError } from "./api/client";
 
 export default function App() {
@@ -96,6 +97,9 @@ export default function App() {
             }
           />
         </Routes>
+        <FloatingAssistantChat
+          email={meState.status === "authed" ? meState.me.email : null}
+        />
         <ForcePasswordChangeModal
           open={
             meState.status === "authed" &&
