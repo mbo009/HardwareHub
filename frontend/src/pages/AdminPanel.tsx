@@ -20,6 +20,7 @@ import type {
   HardwareUpdateResponse,
   Row,
 } from "../components/admin/types";
+import { buildHardwareListSearchParams } from "../hardware/hardwareListQuery";
 
 export default function AdminPanelPage() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -124,33 +125,17 @@ export default function AdminPanelPage() {
   const loadRows = useCallback(() => {
     setIsLoadingRows(true);
     setLoadRowsError(null);
-    const params = new URLSearchParams();
-    if (statusFilter) {
-      const statusMap: Record<string, string> = {
-        Available: "Available",
-        Ordered: "Ordered",
-        Rented: "In Use",
-        "In Repair": "Repair",
-        Unknown: "Unknown",
-      };
-      params.set("status", statusMap[statusFilter] || statusFilter);
-    }
-    if (debouncedBrandFilter) {
-      params.set("brand", debouncedBrandFilter);
-    }
-    if (dateFromFilter) {
-      params.set("dateFrom", dateFromFilter);
-    }
-    if (dateToFilter) {
-      params.set("dateTo", dateToFilter);
-    }
-    const sortByParam = sortBy === "serial" ? "serialNumber" : sortBy;
-    params.set("sortBy", sortByParam);
-    params.set("order", sortOrder);
-    params.set("page", String(page));
-    params.set("limit", "8");
-    const query = params.toString();
-    const path = query ? `/api/hardware?${query}` : "/api/hardware";
+    const params = buildHardwareListSearchParams({
+      statusFilter,
+      brandFilter: debouncedBrandFilter,
+      dateFrom: dateFromFilter,
+      dateTo: dateToFilter,
+      sortBy,
+      sortOrder,
+      page,
+      limit: 8,
+    });
+    const path = `/api/hardware?${params.toString()}`;
 
     apiFetch<HardwareListResponse>(path)
       .then((response) => {

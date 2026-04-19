@@ -6,9 +6,11 @@ import Input from "@mui/joy/Input";
 import Sheet from "@mui/joy/Sheet";
 import Table from "@mui/joy/Table";
 import Typography from "@mui/joy/Typography";
+import AdminFilters from "../components/admin/AdminFilters";
 import AppShell from "../components/AppShell";
 import { apiFetch, type ApiError } from "../api/client";
 import { useMe } from "../auth/useMe";
+import { buildHardwareListSearchParams } from "../hardware/hardwareListQuery";
 
 type HardwareItem = {
   id: number;
@@ -51,11 +53,31 @@ export default function DashboardPage() {
   const [pendingRowId, setPendingRowId] = React.useState<number | null>(null);
   const [page, setPage] = React.useState(1);
   const [totalPages, setTotalPages] = React.useState(1);
+  const [statusFilter, setStatusFilter] = React.useState("");
+  const [brandFilter, setBrandFilter] = React.useState("");
+  const [debouncedBrandFilter, setDebouncedBrandFilter] = React.useState("");
+  const [dateFromFilter, setDateFromFilter] = React.useState("");
+  const [dateToFilter, setDateToFilter] = React.useState("");
+
+  React.useEffect(() => {
+    const t = window.setTimeout(() => {
+      setDebouncedBrandFilter(brandFilter.trim());
+      setPage(1);
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [brandFilter]);
 
   const loadList = React.useCallback(() => {
-    const params = new URLSearchParams();
-    params.set("page", String(page));
-    params.set("limit", String(PAGE_SIZE));
+    const params = buildHardwareListSearchParams({
+      statusFilter,
+      brandFilter: debouncedBrandFilter,
+      dateFrom: dateFromFilter,
+      dateTo: dateToFilter,
+      sortBy: "name",
+      sortOrder: "asc",
+      page,
+      limit: PAGE_SIZE,
+    });
     return apiFetch<HardwareListResponse>(`/api/hardware?${params.toString()}`)
       .then((data) => {
         const tp = Math.max(1, data.totalPages);
@@ -69,7 +91,13 @@ export default function DashboardPage() {
       .catch(() => {
         setError("Could not load hardware list.");
       });
-  }, [page]);
+  }, [
+    page,
+    statusFilter,
+    debouncedBrandFilter,
+    dateFromFilter,
+    dateToFilter,
+  ]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -115,8 +143,29 @@ export default function DashboardPage() {
       .finally(() => setPendingRowId(null));
   }
 
+  const resetFilters = React.useCallback(() => {
+    setStatusFilter("");
+    setBrandFilter("");
+    setDebouncedBrandFilter("");
+    setDateFromFilter("");
+    setDateToFilter("");
+    setPage(1);
+  }, []);
+
   return (
     <AppShell title="Hardware List">
+      <AdminFilters
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        brandFilter={brandFilter}
+        setBrandFilter={setBrandFilter}
+        dateFromFilter={dateFromFilter}
+        setDateFromFilter={setDateFromFilter}
+        dateToFilter={dateToFilter}
+        setDateToFilter={setDateToFilter}
+        onReset={resetFilters}
+        onFilterChangeResetPage={() => setPage(1)}
+      />
       <Box sx={{ width: "100%", maxWidth: 790 }}>
         <Input
           size="sm"
