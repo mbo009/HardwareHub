@@ -6,7 +6,8 @@ import Input from "@mui/joy/Input";
 import Sheet from "@mui/joy/Sheet";
 import Table from "@mui/joy/Table";
 import AppShell from "../components/AppShell";
-import { apiFetch } from "../api/client";
+import { apiFetch, type ApiError } from "../api/client";
+import { useMe } from "../auth/useMe";
 
 type HardwareItem = {
   id: number;
@@ -14,6 +15,7 @@ type HardwareItem = {
   brand: string;
   purchaseDate: string | null;
   status: "Available" | "In Use" | "Repair" | "Unknown";
+  assignedTo: string | null;
 };
 
 type HardwareListResponse = {
@@ -31,32 +33,66 @@ function toUiStatus(status: HardwareItem["status"]) {
 }
 
 export default function DashboardPage() {
+  const { state: meState } = useMe();
   const [rows, setRows] = React.useState<HardwareItem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [actionError, setActionError] = React.useState<string | null>(null);
+  const [pendingRowId, setPendingRowId] = React.useState<number | null>(null);
 
-  React.useEffect(() => {
-    let cancelled = false;
-
-    apiFetch<HardwareListResponse>("/api/hardware?page=1&limit=20")
+  const reload = React.useCallback(() => {
+    return apiFetch<HardwareListResponse>("/api/hardware?page=1&limit=20")
       .then((data) => {
-        if (cancelled) return;
         setRows(data.items);
         setError(null);
       })
       .catch(() => {
-        if (cancelled) return;
         setError("Could not load hardware list.");
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
       });
+  }, []);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    reload()
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reload]);
+
+  const myEmail =
+    meState.status === "authed" ? meState.me.email.trim().toLowerCase() : "";
+
+  function runRentReturn(row: HardwareItem, action: "rent" | "return") {
+    setActionError(null);
+    setPendingRowId(row.id);
+    const path =
+      action === "rent"
+        ? `/api/hardware/${row.id}/rent`
+        : `/api/hardware/${row.id}/return`;
+    apiFetch<HardwareItem>(path, { method: "POST" })
+      .then(() => reload())
+      .catch((err) => {
+        const apiErr = err as ApiError;
+        const code =
+          apiErr?.data && typeof apiErr.data === "object" && apiErr.data !== null
+            ? (apiErr.data as { error?: string }).error
+            : undefined;
+        if (code === "cannot_rent") {
+          setActionError("This device is not available to rent.");
+        } else if (code === "cannot_return") {
+          setActionError("This device cannot be returned.");
+        } else if (code === "forbidden_return") {
+          setActionError("You can only return your own rentals.");
+        } else {
+          setActionError("Action failed. Try again.");
+        }
+      })
+      .finally(() => setPendingRowId(null));
+  }
 
   return (
     <AppShell title="Hardware List">
@@ -68,6 +104,9 @@ export default function DashboardPage() {
           endDecorator={<Box sx={{ color: "#8b5cf6", fontSize: 10 }}>✧</Box>}
         />
       </Box>
+      {actionError ? (
+        <Box sx={{ mb: 0.75, fontSize: 10, color: "#b91c1c" }}>{actionError}</Box>
+      ) : null}
       <Sheet
         variant="outlined"
         sx={{ borderRadius: "md", overflow: "hidden", width: "100%", maxWidth: 790, borderColor: "#e9ebf0" }}
@@ -107,6 +146,10 @@ export default function DashboardPage() {
               rows.map((row) => {
                 const uiStatus = toUiStatus(row.status);
                 const canRent = row.status === "Available";
+                const assigned = (row.assignedTo || "").trim().toLowerCase();
+                const canReturn =
+                  row.status === "In Use" && myEmail.length > 0 && assigned === myEmail;
+                const busy = pendingRowId === row.id;
                 return (
                   <tr key={row.id}>
                     <td>{row.name}</td>
@@ -127,21 +170,43 @@ export default function DashboardPage() {
                       </Chip>
                     </td>
                     <td>
-                      <Button
-                        size="sm"
-                        disabled={!canRent}
-                        sx={{
-                          minHeight: 18,
-                          px: 1,
-                          borderRadius: "sm",
-                          bgcolor: "#0b1220",
-                          color: "white",
-                          fontSize: 8.6,
-                          ":hover": { bgcolor: "#0b1220" },
-                        }}
-                      >
-                        Rent
-                      </Button>
+                      {canReturn ? (
+                        <Button
+                          size="sm"
+                          loading={busy}
+                          disabled={busy}
+                          onClick={() => runRentReturn(row, "return")}
+                          sx={{
+                            minHeight: 18,
+                            px: 1,
+                            borderRadius: "sm",
+                            bgcolor: "#374151",
+                            color: "white",
+                            fontSize: 8.6,
+                            ":hover": { bgcolor: "#374151" },
+                          }}
+                        >
+                          Return
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          loading={busy && canRent}
+                          disabled={!canRent || busy}
+                          onClick={() => canRent && runRentReturn(row, "rent")}
+                          sx={{
+                            minHeight: 18,
+                            px: 1,
+                            borderRadius: "sm",
+                            bgcolor: "#0b1220",
+                            color: "white",
+                            fontSize: 8.6,
+                            ":hover": { bgcolor: "#0b1220" },
+                          }}
+                        >
+                          Rent
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 );
