@@ -7,6 +7,7 @@ from werkzeug.security import generate_password_hash
 
 from app.auth.decorators import admin_required
 from app.db import db
+from app.hardware.serialization import hardware_public_dict
 from app.models import Hardware, User
 from app.security import validate_password
 
@@ -251,20 +252,4 @@ def update_hardware(hardware_id):
     hardware.assigned_to_email = final_assigned
     db.session.commit()
 
-    payload = {
-        "id": hardware.id,
-        "seedId": hardware.seed_id,
-        "name": hardware.name,
-        "brand": hardware.brand,
-        "serialNumber": hardware.serial_number,
-        "purchaseDate": (
-            hardware.purchase_date.isoformat()
-            if hardware.purchase_date
-            else None
-        ),
-        "status": hardware.status,
-        "assignedTo": hardware.assigned_to_email,
-        "notes": hardware.notes,
-        "history": hardware.history_text,
-    }
-    return jsonify(payload), 200
+    return jsonify(hardware_public_dict(hardware)), 200

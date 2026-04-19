@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from werkzeug.security import generate_password_hash
 
@@ -39,6 +39,28 @@ def test_rent_sets_in_use_and_assigned(client, app):
         assert ev.action == "RENT"
         assert ev.from_status == "Available"
         assert ev.to_status == "In Use"
+
+
+def test_rent_fails_when_not_yet_on_site(client, app):
+    from app.db import db
+    from app.models import Hardware
+
+    with app.app_context():
+        future = date.today() + timedelta(days=14)
+        hw = Hardware(
+            name="On order",
+            brand="Lenovo",
+            purchase_date=future,
+            status="Available",
+        )
+        db.session.add(hw)
+        db.session.commit()
+        hw_id = hw.id
+
+    login_user(client)
+    res = client.post(f"/api/hardware/{hw_id}/rent")
+    assert res.status_code == 409
+    assert res.get_json()["error"] == "not_yet_available"
 
 
 def test_rent_fails_when_not_available(client, app):

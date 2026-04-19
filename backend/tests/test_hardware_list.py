@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 
 def login_user(client):
@@ -166,3 +166,90 @@ def test_hardware_list_assigned_to_other_forbidden(client, app):
     res = client.get("/api/hardware?assignedTo=admin@test.com")
     assert res.status_code == 403
     assert res.get_json()["error"] == "forbidden_assigned_to"
+
+
+def test_hardware_list_includes_pre_arrival_for_future_purchase(client, app):
+    from app.db import db
+    from app.models import Hardware
+
+    with app.app_context():
+        db.session.add(
+            Hardware(
+                name="Future Thing",
+                brand="Acme",
+                purchase_date=date.today() + timedelta(days=14),
+                status="Available",
+            ),
+        )
+        db.session.commit()
+
+    login_user(client)
+    res = client.get("/api/hardware?search=Future")
+    assert res.status_code == 200
+    data = res.get_json()
+    item = next(i for i in data["items"] if i["name"] == "Future Thing")
+    assert item["preArrival"] is True
+
+
+def test_hardware_list_status_ordered_filter(client, app):
+    from app.db import db
+    from app.models import Hardware
+
+    with app.app_context():
+        db.session.add(
+            Hardware(
+                name="Future Av",
+                brand="Acme",
+                purchase_date=date.today() + timedelta(days=7),
+                status="Available",
+            ),
+        )
+        db.session.add(
+            Hardware(
+                name="Future InUse",
+                brand="Acme",
+                purchase_date=date.today() + timedelta(days=7),
+                status="In Use",
+            ),
+        )
+        db.session.add(
+            Hardware(
+                name="Past Av",
+                brand="Acme",
+                purchase_date=date(2020, 1, 1),
+                status="Available",
+            ),
+        )
+        db.session.commit()
+
+    login_user(client)
+    res = client.get("/api/hardware?status=Ordered")
+    assert res.status_code == 200
+    data = res.get_json()
+    names = [i["name"] for i in data["items"]]
+    assert "Future Av" in names
+    assert "Future InUse" not in names
+    assert "Past Av" not in names
+
+
+def test_hardware_list_status_unknown_filter(client, app):
+    from app.db import db
+    from app.models import Hardware
+
+    with app.app_context():
+        db.session.add(
+            Hardware(
+                name="Mystery Unit",
+                brand="Acme",
+                purchase_date=None,
+                status="Unknown",
+            ),
+        )
+        db.session.commit()
+
+    login_user(client)
+    res = client.get("/api/hardware?status=Unknown")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert len(data["items"]) == 1
+    assert data["items"][0]["name"] == "Mystery Unit"

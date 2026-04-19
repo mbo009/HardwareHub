@@ -1,32 +1,18 @@
 from datetime import date
 
 from flask import Blueprint, jsonify, request, session
-from sqlalchemy import case
+from sqlalchemy import and_, case
 
 from app.auth.decorators import login_required
 from app.db import db
+from app.hardware.serialization import hardware_public_dict, is_pre_arrival
 from app.models import Hardware, RentalEvent, User
 
 hardware_bp = Blueprint("hardware", __name__, url_prefix="/api/hardware")
 
 
 def to_payload(item: Hardware):
-    return {
-        "id": item.id,
-        "seedId": item.seed_id,
-        "name": item.name,
-        "brand": item.brand,
-        "serialNumber": item.serial_number,
-        "purchaseDate": (
-            item.purchase_date.isoformat()
-            if item.purchase_date
-            else None
-        ),
-        "status": item.status,
-        "assignedTo": item.assigned_to_email,
-        "notes": item.notes,
-        "history": item.history_text,
-    }
+    return hardware_public_dict(item)
 
 
 @hardware_bp.route("/", methods=["GET", "OPTIONS"], strict_slashes=False)
@@ -54,7 +40,15 @@ def list_hardware():
             return jsonify({"error": "forbidden_assigned_to"}), 403
         query = query.filter(Hardware.assigned_to_email == assigned_to_param)
 
-    if status:
+    if status == "Ordered":
+        query = query.filter(
+            and_(
+                Hardware.purchase_date.isnot(None),
+                Hardware.purchase_date > date.today(),
+                Hardware.status.in_(("Available", "Unknown")),
+            )
+        )
+    elif status:
         query = query.filter(Hardware.status == status)
 
     if brand:
@@ -151,6 +145,9 @@ def rent_hardware(hardware_id):
 
     if hardware.status != "Available":
         return jsonify({"error": "cannot_rent"}), 409
+
+    if is_pre_arrival(hardware):
+        return jsonify({"error": "not_yet_available"}), 409
 
     prev_status = hardware.status
     hardware.status = "In Use"
