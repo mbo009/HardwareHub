@@ -5,10 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.assistant.inventory_tools import (
-    format_inventory_tool_results_for_chat,
-    run_assistant_tools,
-)
+from app.assistant.inventory_tools import run_assistant_tools
+from app.assistant.lookup_extract import extract_lookup_plan
 from app.assistant.llm_common import (
     assistant_reply_from_parsed,
     assistant_reply_from_model_raw,
@@ -21,13 +19,17 @@ MAX_TOOL_ROUNDS = 5
 
 TOOL_SYSTEM_APPENDIX = """
 --- INVENTORY TOOLS (live database; no guessing counts) ---
-Stock lookup vs adding new hardware:
-- If the user asks what EXISTS in the warehouse (e.g. "do we have iPads", "how many MacBooks", "any laptops available")
-  and they did NOT attach photos in this request, you MUST call inventory_search and/or inventory_stats first.
-  Answer only from tool results. Set "proposal" to null. Do NOT write "I see…" or describe a device as if from a
-  photo — you are not viewing an image unless the request included images.
-- Use "proposal" / suggestAdd only when the user is registering NEW company hardware (new photos or explicit
-  intake details), not for simple stock questions.
+Intents:
+- intake_add: user is registering NEW company hardware (usually new photos or explicit intake details).
+- inventory_lookup: user asks what exists in stock, counts, availability/rentability.
+- inventory_recommendation: user asks which existing device should be rented for a use case
+  (e.g. "mobile app testing", "cheap laptop for browsing only").
+
+For inventory_lookup and inventory_recommendation with no new photos:
+- You MUST call inventory_search and/or inventory_stats first.
+- Set "proposal" to null.
+- Do NOT ask for serial/model/purchase-date forms.
+- Do NOT write "I see..." (there is no photo analysis in this path).
 
 When the user asks about current stock, how many devices, what is available to rent, or which machine fits
 a use case (e.g. cheap laptop for browsing), you MUST NOT invent numbers or device lists. Use the tools below
@@ -35,7 +37,7 @@ by filling "tool_calls" in your JSON. You may issue one or more tool calls in th
 
 Available tools:
 1) inventory_search — arguments: query (string, optional; matches name or brand, case-insensitive),
-   status (optional: "Available", "Rentable", "In Use", "Repair", "Unknown", or null for any),
+   status (optional: "Available", "Rentable", "In Use", "Repair", "Unknown", "Ordered", or null for any),
    limit (int, default 40, max 80).
    Use for "how many MacBooks", "Dell laptops available", "what can I rent", etc. Prefer status "Rentable"
    when the user means devices they can actually rent now (on site, not pre-arrival).
@@ -54,10 +56,13 @@ YOU choose tool arguments — never ask the user for them:
 - If one query might miss rows (e.g. "MacBook" vs "Mac"), prefer a short substring like "mac" that matches both.
 - Your reply after tools must be a normal sentence with numbers from tool results — not a form asking for filters.
 
-After you receive tool results in a follow-up message, answer in plain language. For recommendations:
-the database has no price field — say that clearly; use device names and notes only; if every listed laptop
-looks high-end, say so honestly and still suggest the lightest or most modest option from the list by name,
-or offer any Rentable option as a last resort.
+After you receive tool results in a follow-up message:
+- For inventory_lookup: report exact numbers/lists from tool output.
+- For inventory_recommendation: pick candidates from returned rows and rank using your general product knowledge
+  (typical device family positioning, portability, expected comfort for the use case). Be explicit that this is
+  a best-effort estimate because the DB has no direct price/performance fields.
+- If the user asks for "cheapest/basic" and available laptops look high-end, say that clearly and still propose
+  the least overpowered option from current rentable devices.
 
 Always include "tool_calls" in your JSON. Use an empty array [] when you do not need tools for this turn.
 """
@@ -94,6 +99,64 @@ def _tool_followup_user_content(tool_results: list[dict[str, Any]]) -> str:
     )
 
 
+def _stage1_seed_for_lookup(
+    messages: list[dict[str, str]],
+    images: list[str] | None,
+    *,
+    provider: str,
+    api_key: str,
+    model: str,
+    ollama_base_url: str,
+    ollama_image_mode: str,
+) -> list[dict[str, str]]:
+    """
+    Stage-1 (lightweight): use LLM to classify intent and infer initial tool calls.
+    Stage-2 (main loop) then answers based on tool results.
+    """
+    if images or not messages:
+        return []
+    last = messages[-1]
+    if last.get("role") != "user":
+        return []
+    user_text = (last.get("content") or "").strip()
+    if not user_text:
+        return []
+    try:
+        plan = extract_lookup_plan(
+            user_text,
+            provider=provider,
+            api_key=api_key,
+            model=model,
+            ollama_base_url=ollama_base_url,
+            ollama_image_mode=ollama_image_mode,
+        )
+    except Exception:
+        return []
+    if not isinstance(plan, dict):
+        return []
+    intent = (plan.get("intent") or "").strip()
+    if intent not in {"inventory_lookup", "inventory_recommendation"}:
+        return []
+    tool_calls = plan.get("tool_calls")
+    if not isinstance(tool_calls, list) or not tool_calls:
+        return []
+    results = run_assistant_tools(tool_calls)
+    return [
+        {
+            "role": "assistant",
+            "content": (
+                "Planner stage: detected intent="
+                + intent
+                + ". Running initial inventory tools before final response."
+            ),
+        },
+        {
+            "role": "user",
+            "content": _tool_followup_user_content(results),
+        },
+    ]
+
+
 def run_assistant_with_tools(
     messages: list[dict[str, str]],
     images: list[str] | None,
@@ -105,10 +168,17 @@ def run_assistant_with_tools(
     ollama_image_mode: str,
 ) -> dict[str, Any]:
     prov = (provider or "mock").lower()
-    suffix: list[dict[str, str]] = []
+    suffix: list[dict[str, str]] = _stage1_seed_for_lookup(
+        messages,
+        images,
+        provider=prov,
+        api_key=api_key,
+        model=model,
+        ollama_base_url=ollama_base_url,
+        ollama_image_mode=ollama_image_mode,
+    )
     imgs = images
     last_raw = "{}"
-    last_tool_results: list[dict[str, Any]] | None = None
 
     for _round in range(MAX_TOOL_ROUNDS):
         combined = messages + suffix
@@ -133,17 +203,9 @@ def run_assistant_with_tools(
 
         tool_calls = _normalize_tool_calls(data)
         if not tool_calls:
-            forced = (
-                format_inventory_tool_results_for_chat(last_tool_results)
-                if last_tool_results
-                else None
-            )
-            if forced:
-                data["message"] = forced
             return assistant_reply_from_parsed(data)
 
         results = run_assistant_tools(tool_calls)
-        last_tool_results = results
         brief = (data.get("message") or "").strip() or "Checking the inventory…"
         suffix.append({"role": "assistant", "content": brief})
         suffix.append({"role": "user", "content": _tool_followup_user_content(results)})
@@ -153,14 +215,7 @@ def run_assistant_with_tools(
     except json.JSONDecodeError:
         return assistant_reply_from_model_raw(last_raw)
     data["tool_calls"] = []
-    forced = (
-        format_inventory_tool_results_for_chat(last_tool_results)
-        if last_tool_results
-        else None
-    )
-    if forced:
-        data["message"] = forced
-    elif not (data.get("message") or "").strip():
+    if not (data.get("message") or "").strip():
         data["message"] = (
             "I could not finish loading inventory. Try a shorter question or check the dashboard."
         )

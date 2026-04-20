@@ -1,11 +1,11 @@
-"""Server-side inventory lookups for the assistant (no full stock in the LLM context)."""
+"""Server-side inventory lookups for the assistant."""
 
 from __future__ import annotations
 
 from datetime import date
 from typing import Any
 
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 
 from app.db import db
 from app.hardware.serialization import hardware_public_dict
@@ -15,7 +15,18 @@ from app.models import Hardware
 def _available_on_site_clause():
     return (
         Hardware.status == "Available",
-        or_(Hardware.purchase_date.is_(None), Hardware.purchase_date <= date.today()),
+        or_(
+            Hardware.purchase_date.is_(None),
+            Hardware.purchase_date <= date.today(),
+        ),
+    )
+
+
+def _ordered_pre_arrival_clause():
+    return (
+        Hardware.purchase_date.isnot(None),
+        Hardware.purchase_date > date.today(),
+        Hardware.status.in_(["Available", "Unknown"]),
     )
 
 
@@ -25,26 +36,37 @@ def inventory_search(
     limit: int = 40,
 ) -> dict[str, Any]:
     """
-    Search hardware by substring in name or brand. status: Available, In Use, Repair, Unknown,
-    Rentable (on-site + available to rent), or null/empty for all rows (still capped by limit).
+    Search hardware by substring in name or brand. status: Available, In Use,
+    Repair, Unknown, Ordered (pre-arrival), Rentable (on-site + available to
+    rent), or null/empty for all rows (still capped by limit).
     """
     lim = max(1, min(int(limit or 40), 80))
     q = Hardware.query
     st = (status or "").strip()
     if st.lower() == "rentable":
         q = q.filter(*_available_on_site_clause())
+    elif st == "Ordered":
+        q = q.filter(and_(*_ordered_pre_arrival_clause()))
     elif st:
         if st == "Available":
             q = q.filter(
                 Hardware.status == "Available",
-                or_(Hardware.purchase_date.is_(None), Hardware.purchase_date <= date.today()),
+                or_(
+                    Hardware.purchase_date.is_(None),
+                    Hardware.purchase_date <= date.today(),
+                ),
             )
         else:
             q = q.filter(Hardware.status == st)
     qn = (query or "").strip()
     if qn:
         like = f"%{qn}%"
-        q = q.filter(or_(Hardware.name.ilike(like), Hardware.brand.ilike(like)))
+        q = q.filter(
+            or_(
+                Hardware.name.ilike(like),
+                Hardware.brand.ilike(like),
+            )
+        )
     q = q.order_by(Hardware.brand.asc(), Hardware.name.asc()).limit(lim)
     rows = q.all()
     items = []
@@ -112,14 +134,18 @@ def execute_assistant_tool(name: str, arguments: Any) -> dict[str, Any]:
             a = arguments if isinstance(arguments, dict) else {}
             return {
                 "ok": True,
-                "result": inventory_stats(group_by=str(a.get("group_by") or "status")),
+                "result": inventory_stats(
+                    group_by=str(a.get("group_by") or "status")
+                ),
             }
         return {"ok": False, "error": f"unknown_tool:{name}"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
 
-def run_assistant_tools(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def run_assistant_tools(
+    tool_calls: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for c in tool_calls:
         if not isinstance(c, dict):
@@ -135,9 +161,11 @@ def run_assistant_tools(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]
     return out
 
 
-def format_inventory_tool_results_for_chat(tool_results: list[dict[str, Any]]) -> str | None:
+def format_inventory_tool_results_for_chat(
+    tool_results: list[dict[str, Any]],
+) -> str | None:
     """
-    Build the user-visible reply purely from DB tool output so counts cannot be hallucinated.
+    Build user-visible reply from DB tool output only.
     Returns None if there is nothing safe to format.
     """
     if not tool_results:
@@ -167,7 +195,10 @@ def _format_one_inventory_search(tr: dict[str, Any]) -> str:
     st_disp = (str(st).strip() if st is not None else "") or "any"
     q_disp = f'matching "{q}"' if q else "with no name/brand filter"
     st_label = st_disp if st_disp != "any" else "any status"
-    header = f"Exact database matches {q_disp} (status filter: {st_label}): {n} device(s)."
+    header = (
+        f"Exact database matches {q_disp} "
+        f"(status filter: {st_label}): {n} device(s)."
+    )
     if n == 0:
         return header + " Nothing is listed under this search."
     lines: list[str] = []
@@ -189,5 +220,11 @@ def _format_one_inventory_stats(res: dict[str, Any]) -> str:
     counts = res.get("counts") or {}
     if not counts:
         return f"No aggregate data returned (group by {gb})."
-    parts = [f"{k}: {v}" for k, v in sorted(counts.items(), key=lambda x: (-x[1], str(x[0])))]
+    parts = [
+        f"{k}: {v}"
+        for k, v in sorted(
+            counts.items(),
+            key=lambda x: (-x[1], str(x[0])),
+        )
+    ]
     return f"Exact counts by {gb} in the database: " + ", ".join(parts) + "."

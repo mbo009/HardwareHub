@@ -51,6 +51,20 @@ function localPartFromEmail(email: string): string {
   return at === -1 ? email : email.slice(0, at);
 }
 
+/** User is asking about existing warehouse stock (not adding a new device). */
+function looksLikeStockLookupMessage(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 4) return false;
+  if (
+    /\b(do we have|are there (any )?|is there any|how many|what(?:'s| is) (?:in stock|available)|czy mamy|ile (?:jest|mamy)|stan magazynu)\b/i.test(
+      t,
+    )
+  )
+    return true;
+  if (/\bany\b.+\bavailable\b/i.test(t)) return true;
+  return false;
+}
+
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -148,6 +162,8 @@ export default function FloatingAssistantChat(props: Props) {
     setMessages(history);
     setDraft("");
     const imgs = [...pendingImages];
+    const newPhotosThisSend = imgs.length > 0;
+    const stockLookupAsk = looksLikeStockLookupMessage(text) && !newPhotosThisSend;
     setPendingImages([]);
     setLoading(true);
     try {
@@ -159,7 +175,11 @@ export default function FloatingAssistantChat(props: Props) {
         }),
       });
       setMessages((m) => [...m, { role: "assistant", content: res.message }]);
-      setProposal((prev) => res.proposal ?? prev);
+      setProposal((prev) => {
+        if (newPhotosThisSend) return res.proposal;
+        if (stockLookupAsk) return res.proposal ?? null;
+        return res.proposal ?? prev;
+      });
     } catch (err) {
       const apiErr = err as ApiError;
       if (apiErr?.status === 401) {

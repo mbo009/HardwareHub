@@ -1,5 +1,4 @@
 import os
-import re
 
 from dotenv import load_dotenv
 from flask import Blueprint, current_app, jsonify, request
@@ -14,100 +13,6 @@ assistant_bp = Blueprint("assistant", __name__, url_prefix="/api/assistant")
 MAX_IMAGES = 4
 MAX_MESSAGE_LEN = 8000
 MAX_HISTORY = 24
-
-_STOCK_LOOKUP_HINT_RE = re.compile(
-    r"(?i)"
-    r"\b("
-    r"do we have|"
-    r"are there (any )?|"
-    r"is there any|"
-    r"how many|"
-    r"what(?:'s| is) (?:in stock|available)|"
-    r"czy mamy|"
-    r"ile (?:jest|mamy)|"
-    r"stan magazynu"
-    r")\b|"
-    r"\bany\b.+\bavailable\b"
-)
-
-
-def _message_looks_like_stock_lookup(text: str) -> bool:
-    t = (text or "").strip()
-    if len(t) < 4:
-        return False
-    return bool(_STOCK_LOOKUP_HINT_RE.search(t))
-
-
-def _extract_inventory_search_query(text: str) -> str | None:
-    """Map user wording to inventory_search query substring (ILIKE %query%)."""
-    t = (text or "").lower()
-    for word, q in (
-        ("macbook", "mac"),
-        ("thinkpad", "thinkpad"),
-        ("chromebook", "chromebook"),
-        ("surface", "surface"),
-        ("iphone", "iphone"),
-        ("ipad", "ipad"),
-        ("dell", "dell"),
-        ("lenovo", "lenovo"),
-        ("samsung", "samsung"),
-        ("monitor", "monitor"),
-        ("sony", "sony"),
-        ("logitech", "logitech"),
-        ("razer", "razer"),
-        ("microsoft", "microsoft"),
-        ("asus", "asus"),
-        ("acer", "acer"),
-        ("hp", "hp"),
-    ):
-        if re.search(rf"\b{re.escape(word)}s?\b", t):
-            return q
-    if re.search(r"\bmacs?\b", t):
-        return "mac"
-    if re.search(r"\bmice\b", t) or re.search(r"\bmouses?\b", t) or re.search(r"\bmouse\b", t):
-        return "mouse"
-    if re.search(r"\bkeyboards?\b", t):
-        return "keyboard"
-    return None
-
-
-def _infer_status_filter_for_stock_question(text: str) -> str | None:
-    """
-    None = all rows matching the name/brand query (any status: Rented, Available, …).
-    Rentable = on-site and free to assign (excludes pre-arrival).
-    Use Rentable only when the user clearly asks about renting/borrowing.
-    Do NOT treat generic 'available' as SQL filter for 'how many X do we have' — that counts inventory.
-    """
-    t = (text or "").lower()
-    if re.search(r"\b(rent|rental|wynaj|borrow|to rent|for rent)\b", t):
-        return "Rentable"
-    return None
-
-
-def _deterministic_stock_reply(user_text: str) -> dict | None:
-    """
-    When the user asks a stock-style question and we can infer a device/brand token,
-    answer purely from SQL — no LLM (avoids hallucinated counts when the model skips tools).
-    """
-    if not _message_looks_like_stock_lookup(user_text):
-        return None
-    q = _extract_inventory_search_query(user_text)
-    if not q:
-        return None
-    from app.assistant.inventory_tools import format_inventory_tool_results_for_chat, inventory_search
-
-    st = _infer_status_filter_for_stock_question(user_text)
-    res = inventory_search(query=q, status=st, limit=80)
-    tool_row = {
-        "tool": "inventory_search",
-        "arguments": {"query": q, "status": st},
-        "ok": True,
-        "result": res,
-    }
-    msg = format_inventory_tool_results_for_chat([tool_row])
-    if not msg:
-        return None
-    return {"message": msg, "proposal": None}
 
 
 @assistant_bp.route("/settings", methods=["GET", "OPTIONS"])
@@ -185,8 +90,6 @@ def chat():
     if not messages or messages[-1]["role"] != "user":
         return jsonify({"error": "last_message_must_be_user"}), 400
 
-    original_last_user_text = messages[-1]["content"]
-
     images_raw = data.get("images")
     images: list[str] | None = None
     if isinstance(images_raw, list) and images_raw:
@@ -210,17 +113,6 @@ def chat():
         _last = messages[-1]["content"]
         if "[Inventory: identify hardware only" not in _last:
             messages[-1]["content"] = _last + _vision_hint
-
-    if not images and _message_looks_like_stock_lookup(messages[-1]["content"]):
-        _stock_hint = (
-            "\n\n[Reply mode: existing stock lookup — call inventory_search or inventory_stats via tool_calls "
-            "with arguments YOU infer (e.g. query \"mac\", status \"Rentable\" for MacBooks available). "
-            "Never ask the user to supply query/status. Answer from tool results. Set proposal to null. "
-            "Do not describe hardware as if from a photo unless images were attached in this request.]"
-        )
-        _last = messages[-1]["content"]
-        if "[Reply mode: existing stock lookup" not in _last:
-            messages[-1]["content"] = _last + _stock_hint
 
     provider = (current_app.config.get("LLM_PROVIDER") or "mock").lower()
     ollama_base = (
@@ -252,11 +144,6 @@ def chat():
         bool((current_app.config.get("GEMINI_API_KEY") or "").strip()),
         ollama_base if provider == "ollama" else "",
     )
-
-    if not images:
-        direct = _deterministic_stock_reply(original_last_user_text)
-        if direct is not None:
-            return jsonify(direct), 200
 
     result = run_assistant(
         messages,

@@ -89,3 +89,39 @@ def test_inventory_search_rentable_excludes_future_pre_arrival(app):
         r = inventory_search(query="", status="Rentable", limit=20)
     names = {x["name"] for x in r["items"]}
     assert "Future Mac" not in names
+
+
+def test_inventory_search_ordered_includes_future_available_unknown(app):
+    from app.db import db
+    from app.models import Hardware
+
+    seed_hardware(app)
+    with app.app_context():
+        db.session.add_all(
+            [
+                Hardware(
+                    name="Ordered Available Mac",
+                    brand="Apple",
+                    purchase_date=date(2099, 1, 1),
+                    status="Available",
+                ),
+                Hardware(
+                    name="Ordered Unknown Mac",
+                    brand="Apple",
+                    purchase_date=date(2099, 1, 2),
+                    status="Unknown",
+                ),
+                Hardware(
+                    name="Future In Use Mac",
+                    brand="Apple",
+                    purchase_date=date(2099, 1, 3),
+                    status="In Use",
+                ),
+            ]
+        )
+        db.session.commit()
+        r = inventory_search(query="", status="Ordered", limit=50)
+    names = {x["name"] for x in r["items"]}
+    assert "Ordered Available Mac" in names
+    assert "Ordered Unknown Mac" in names
+    assert "Future In Use Mac" not in names
