@@ -61,7 +61,7 @@ Internal app for Booksy employees to manage, rent, and maintain company hardware
 
 ## 🔮 Next Steps (24h Roadmap)
 
-If we had one more focused day, top priorities:
+If I had one more focused day, top priorities:
 
 1. **Stabilize Assistant Pipeline**
    - add structured retries and parser recovery for malformed model outputs,
