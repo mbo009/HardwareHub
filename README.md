@@ -33,6 +33,8 @@ Internal app for Booksy employees to manage, rent, and maintain company hardware
   - stock lookup in natural language,
   - recommendation-style questions using inventory tool calls.
 
+**Documentation:** **[User guide](./docs/USER_GUIDE.md)** (login, renting, filters) · **[Hardware & status reference](./docs/USER_GUIDE_REFERENCE.md)** (fields & statuses)
+
 ---
 
 ## ✅ Fully Implemented (Stable)
@@ -77,10 +79,114 @@ If I had one more focused day, top priorities:
 
 ---
 
-## 🚀 Local Setup (Quick)
+## 🚀 Local setup
 
-1. Create backend venv and install dependencies.
-2. Configure `.env` (provider keys / Ollama URL / model).
-3. Start backend.
-4. Start frontend.
-5. Log in with seeded/admin credentials and test flows.
+### Prerequisites
+
+- **Python** 3.10+ (with `python` / `py` on `PATH`)
+- **Node.js** 18+ and **npm** (for the Vite frontend)
+
+### 1. Backend virtualenv and dependencies
+
+From the repo root:
+
+**Windows (PowerShell)**
+
+```powershell
+python -m venv backend\.venv
+.\backend\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r backend\requirements.txt
+```
+
+**macOS / Linux**
+
+```bash
+python3 -m venv backend/.venv
+source backend/.venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r backend/requirements.txt
+```
+
+Keep the venv activated for all backend commands below (or call the interpreter explicitly: `backend\.venv\Scripts\python.exe` on Windows).
+
+### 2. Environment file
+
+```powershell
+copy .env.example .env
+```
+
+Edit **`.env`** at the repo root (Flask loads it from there via `backend/run.py`). Minimum for a quick run: `FLASK_SECRET_KEY`, `DATABASE_URL` (default SQLite path is fine), and optional LLM settings if you use the assistant.
+
+### 3. Database location and seeding
+
+- **SQLite file (default):** `backend/instance/hardwarehub.db` when `DATABASE_URL` is `sqlite:///backend/instance/hardwarehub.db` (see `.env.example`).
+- **Seed file for hardware:** `backend/app/seed/seed_data.json` (imported only when the `hardware` table is empty).
+
+From repo root, with the venv active:
+
+```powershell
+python backend\scripts\init_db.py
+python backend\scripts\seed_db.py
+python backend\scripts\seed_users.py
+```
+
+- `init_db.py` — creates tables.
+- `seed_db.py` — imports seed hardware from JSON if the inventory is empty.
+- `seed_users.py` — creates default users **only if no users exist** (skips if you already have accounts).
+
+### 4. Seeded login accounts
+
+Created by `seed_users.py` (when the users table was empty):
+
+| Email              | Password    | Role  |
+| ------------------ | ----------- | ----- |
+| `admin@booksy.com` | `Admin123!` | admin |
+| `user@booksy.com`  | `User123!`  | user  |
+
+Login emails must use the **`@booksy.com`** domain (enforced in the UI). Change passwords after first use in a real deployment.
+
+### 5. Start the backend
+
+From repo root, venv active, default port **5000**:
+
+**Windows**
+
+```powershell
+$env:PORT = "5000"
+python backend\run.py
+```
+
+**macOS / Linux**
+
+```bash
+export PORT=5000
+python backend/run.py
+```
+
+API base: `http://127.0.0.1:5000/` (health: `GET /` → JSON). CORS for the SPA is configured for `http://localhost:5173` by default.
+
+### 6. Start the frontend
+
+New terminal, from repo root:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+App URL: **http://localhost:5173** (Vite dev server; `VITE_API_BASE_URL` in `.env` should point at the backend, usually `http://localhost:5000`).
+
+### 7. Run backend tests (optional)
+
+```powershell
+cd backend
+pytest -q
+```
+
+---
+
+## 🤖 AI Development Log
+
+👉 **[Full document](./docs/AI_LOG.md)**
