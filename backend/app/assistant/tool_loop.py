@@ -9,8 +9,8 @@ from app.assistant.inventory_tools import run_assistant_tools
 from app.assistant.lookup_extract import extract_lookup_plan
 from app.assistant.llm_common import (
     assistant_reply_from_parsed,
-    assistant_reply_from_model_raw,
     effective_system_prompt,
+    log_error,
     parse_assistant_model_json,
 )
 from app.assistant import llm_client
@@ -199,7 +199,17 @@ def run_assistant_with_tools(
         try:
             data = parse_assistant_model_json(raw_text)
         except json.JSONDecodeError:
-            return assistant_reply_from_model_raw(raw_text)
+            log_error(
+                "assistant tool_loop: malformed JSON from model; "
+                "returning graceful fallback message"
+            )
+            return {
+                "message": (
+                    "I could not parse the model response this time. "
+                    "Please ask again or use a shorter query."
+                ),
+                "proposal": None,
+            }
 
         tool_calls = _normalize_tool_calls(data)
         if not tool_calls:
@@ -213,7 +223,17 @@ def run_assistant_with_tools(
     try:
         data = parse_assistant_model_json(last_raw)
     except json.JSONDecodeError:
-        return assistant_reply_from_model_raw(last_raw)
+        log_error(
+            "assistant tool_loop: malformed JSON on final round; "
+            "returning graceful fallback message"
+        )
+        return {
+            "message": (
+                "I could not parse the model response this time. "
+                "Please ask again or use a shorter query."
+            ),
+            "proposal": None,
+        }
     data["tool_calls"] = []
     if not (data.get("message") or "").strip():
         data["message"] = (
