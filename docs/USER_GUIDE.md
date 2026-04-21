@@ -13,6 +13,8 @@ This guide covers day-to-day use of the web app. For **field definitions and sta
 
 ## Login
 
+![Login — sign in with work email and password](./demo/login.gif)
+
 1. Open the app and go to the **Login** page.
 2. Enter your **work email** and **password**.
    - Email must be on the **`@booksy.com`** domain (the UI validates this).
@@ -26,10 +28,14 @@ If credentials are wrong, you will see a generic “Invalid email or password”
 
 There is **no public self-registration**. New accounts are created by an **administrator**:
 
+![Create user — admin creates account and gets temporary password](./demo/create_user.gif)
+
 1. An admin opens **Admin** and uses **Create user** (or equivalent).
 2. They enter the new person’s **`@booksy.com`** email and choose **user** or **admin** role.
 3. The system generates a **temporary password** and shows it once to the admin (to pass to the new user securely).
 4. On **first login**, the new user may be forced to **change the password** before continuing (password policy applies).
+
+![Change password — required password update before continuing](./demo/change_password.gif)
 
 So “registration” here means **admin-created account + first login with a temp password**, not a signup form on the login page.
 
@@ -38,6 +44,8 @@ So “registration” here means **admin-created account + first login with a te
 ## Hardware list (Dashboard)
 
 The main table shows company devices: name, brand, purchase date (shown as “Date added” in the UI), status, and actions.
+
+![Dashboard — filters, sorting, and paging](./demo/filter.gif)
 
 - Use **Prev** / **Next** at the bottom to move between **pages** (fixed page size).
 - Default ordering is **by device name (A→Z)**; server-side filtering keeps performance predictable on large catalogs.
@@ -62,6 +70,8 @@ The dashboard list is loaded with a **fixed sort** (by name ascending) in the cu
 ---
 
 ## Renting and returning
+
+![Rent — dashboard rent, then My rentals, then return](./demo/rent.gif)
 
 ### Rent
 
@@ -92,8 +102,12 @@ Use **My rentals** in the app shell to see hardware **assigned to you**, with si
 
 Admins manage inventory from the **Admin** area:
 
+![Add hardware — create a new device](./demo/create.gif)
+
 - **Add** new hardware with required **name** and **brand**, optional **serial number**, **purchase date**, **status**, **notes**, **history**, etc.
 - **Edit** or **remove** rows according to permissions; deletes may be blocked if the device is not in a deletable state (e.g. still **In use**).
+
+![Edit hardware — set status (e.g. repair), update fields, delete](./demo/edit.gif)
 
 Exact JSON fields and valid status **values** are listed in **[USER_GUIDE_REFERENCE.md](./USER_GUIDE_REFERENCE.md)**.
 
@@ -101,7 +115,13 @@ Exact JSON fields and valid status **values** are listed in **[USER_GUIDE_REFERE
 
 ## AI assistant (optional)
 
-If enabled in your deployment, the floating assistant can help with inventory questions and suggest actions. It uses the same login session as the rest of the app. Behavior depends on configured LLM backend (local Ollama, cloud APIs, etc.).
+If enabled in your deployment, the floating assistant can help with inventory questions and suggest actions. It uses the same login session as the rest of the app.
+
+![Assistant — search the hardware database in chat](./demo/chat_search.gif)
+
+![Assistant — add hardware from a photo with chat](./demo/chat_add.gif)
+
+Behavior depends on configured LLM backend (local Ollama, cloud APIs, etc.).
 
 ---
 
